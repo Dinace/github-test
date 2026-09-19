@@ -72,11 +72,26 @@ sont propres.
   que par dépôt séparé. Le code partagé entre agents (auth, facturation, accès base de
   données, mémoire commune) sera isolé dans un package partagé dédié le moment venu — pas
   encore créé à ce stade.
+- **Framework web/API** : **FastAPI**. Async, léger, adapté pour exposer les actions des
+  agents (Claude Agent SDK) côté serveur et documenter l'API automatiquement (OpenAPI).
+- **Dashboard client** : rendu côté serveur, stack 100% Python plutôt qu'un frontend JS
+  séparé.
+  - **Jinja2** pour les templates (déjà utilisé par l'agent Création de site — une seule
+    techno de templating dans tout le projet).
+  - **HTMX** pour l'interactivité (rafraîchir une section de page sans rechargement complet)
+    sans avoir à maintenir une stack JS/build séparée.
+  - **Alpine.js** pour les interactions ponctuelles purement côté client (menus, toggles).
+  - **Tailwind CSS** pour le style, cohérent avec le choix déjà fait pour les sites générés
+    par l'agent Création de site.
+  - Raison de ce choix : une seule équipe/langage à maintenir (Python de bout en bout),
+    pages légères et rapides à charger — important vu l'usage majoritairement mobile et la
+    connectivité parfois limitée dans le marché cible — et aucun build JS séparé à déployer.
+    Limite assumée : moins adapté qu'un SPA (ex. Next.js) si le dashboard devait devenir
+    très riche en interactions temps réel ; à réévaluer si ce besoin apparaît concrètement.
 
 **Encore à trancher** (non bloquant pour la suite de la mise en place, mais à définir avant
-le développement applicatif réel) : framework frontend du dashboard client, approche
-technique précise de génération de site (voir `agents/creation-site/skills/README.md`),
-hébergement/infrastructure de production.
+le développement applicatif réel) : approche technique précise de génération de site (voir
+`agents/creation-site/skills/README.md`), hébergement/infrastructure de production.
 
 Tant que le scaffolding applicatif (pyproject.toml, package Python, migrations) n'existe
 pas, aucun agent IA ne doit générer de code d'implémentation définitif au-delà de la

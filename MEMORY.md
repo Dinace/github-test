@@ -131,8 +131,41 @@ Format d'entrée suggéré :
 **Questions ouvertes**
 - Validation des quotas chiffrés une fois les coûts API réels (Meta, WhatsApp Business,
   scraping, etc.) et le pricing final connus.
-- Framework frontend du dashboard client, hébergement/infrastructure de production.
+- Hébergement/infrastructure de production.
 - Catalogue de templates par secteur (Création de site), sources publiques autorisées et
   critères de scoring (Prospection), format du brief/validation avant publication (Réseaux
   sociaux), politique de rétention des sauvegardes (Maintenance).
+- Scaffolding applicatif réel (pyproject.toml, package partagé, migrations) non démarré.
+
+---
+
+## 2026-09-19 — Framework web/API et dashboard client
+
+**Décisions techniques**
+- Choix délégué par l'utilisateur ; tranché par Claude : stack **100% Python** pour rester
+  cohérent avec le reste du projet et adapté à une petite équipe + utilisateurs
+  majoritairement mobiles avec connectivité parfois limitée (marché cible africain).
+- **FastAPI** retenu comme framework web/API (async, léger, adapté à l'orchestration des
+  agents via Claude Agent SDK, documentation OpenAPI automatique).
+- **Dashboard client** rendu côté serveur : Jinja2 (déjà utilisé par l'agent Création de
+  site) + HTMX (interactivité sans rechargement complet) + Alpine.js (interactions
+  ponctuelles côté client) + Tailwind CSS (cohérent avec le style des sites générés).
+- Alternative écartée pour l'instant : un frontend SPA séparé (Next.js/Nuxt) — plus riche en
+  interactions mais double la stack à maintenir (Python + JS) et alourdit le poids de page
+  pour des utilisateurs mobiles en connectivité parfois limitée. À reconsidérer si le
+  dashboard doit devenir très interactif en temps réel.
+- `CLAUDE.md` §3 mis à jour ; retiré de la liste "encore à trancher".
+
+**État d'avancement par agent**
+- Inchangé (skills documentées pour les 4 agents, aucun code applicatif).
+
+**Problèmes rencontrés / solutions**
+- Aucun.
+
+**Questions ouvertes**
+- Hébergement/infrastructure de production.
+- Approche technique précise de génération de site (catalogue de templates par secteur).
+- Sources publiques autorisées et critères de scoring (Prospection), format du
+  brief/validation avant publication (Réseaux sociaux), politique de rétention des
+  sauvegardes (Maintenance).
 - Scaffolding applicatif réel (pyproject.toml, package partagé, migrations) non démarré.
