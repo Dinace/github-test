@@ -1,0 +1,17 @@
+# Config Fly.io (CLAUDE.md §3). Le nom de l'app doit être unique globalement sur Fly.io —
+# à renommer avant le premier déploiement réel.
+app = "digitalisation-platform"
+primary_region = "jnb"  # Johannesburg — région choisie pour la latence en Afrique
+
+[build]
+
+[http_service]
+internal_port = 8080
+force_https = true
+auto_stop_machines = "stop"
+auto_start_machines = true
+min_machines_running = 0
+
+[[vm]]
+size = "shared-cpu-1x"
+memory = "512mb"

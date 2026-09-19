@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.git/
+.gitignore
+config/
+docs/
+agents/
+tests/
+*.md

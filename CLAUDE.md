@@ -145,8 +145,15 @@ structure de fichiers et de la documentation.
   sur la branche principale sans revue.
 - **Secrets** : jamais de secret, clé ou token en clair dans le dépôt (voir section 5 et
   `config/credentials/README.md`).
-- **Structure de dossiers, nommage de fichiers, style de code** : à définir une fois la
-  stack technique choisie (section 3).
+- **Structure de dossiers, nommage de fichiers, style de code** : Python (PEP 8, snake_case
+  pour modules/fonctions). **Point d'attention non résolu** : les dossiers `agents/<nom-
+  agent>/` (section 2) sont en kebab-case (ex. `creation-site`), qui n'est pas un nom de
+  package Python valide (les tirets cassent `import agents.creation-site`). Ces dossiers ne
+  contiennent pour l'instant que `skills/README.md` (documentation), donc ce n'est pas
+  encore bloquant. Avant d'y ajouter du code Python exécuté par le Claude Agent SDK, il
+  faudra trancher : import par chemin de fichier (`importlib.util`) en gardant le
+  kebab-case, ou renommage en snake_case (impact : mise à jour de tous les chemins déjà
+  référencés dans `CLAUDE.md`/`MEMORY.md`).
 
 ## 5. Sécurité et permissions des agents IA
 
@@ -182,14 +189,24 @@ intervient sur le code du projet lui-même.
 
 ## 6. Lancer et tester le projet en local
 
-Le scaffolding applicatif (pyproject.toml, package Python, migrations) n'est pas encore
-créé — cette section sera complétée dès qu'il existera. Ce qui est déjà fixé :
+Scaffolding applicatif créé : package partagé `platform_core/` (config, accès DB, modèles),
+app FastAPI + dashboard dans `app/`, migrations Alembic dans `migrations/`. Aucun code
+métier des agents n'est encore implémenté (voir `agents/<nom-agent>/skills/README.md` pour
+la conception, pas encore de code).
 
-- Copier `config/credentials/.env.example` vers `config/credentials/.env` et renseigner les
-  vraies valeurs (jamais commitées).
-- La clé API Claude n'est **jamais** placée dans `config/credentials/` : elle est fournie à
-  l'exécution par un mécanisme séparé (variable d'environnement gérée hors dépôt), documenté
-  ultérieurement.
+1. Copier `config/credentials/.env.example` vers `config/credentials/.env` et renseigner au
+   minimum `DATABASE_URL` (PostgreSQL local ou distant). La clé API Claude n'est **jamais**
+   placée ici : elle est fournie à l'exécution par un mécanisme séparé (variable
+   d'environnement gérée hors dépôt), documenté ultérieurement.
+2. Installer les dépendances (Python ≥ 3.12) : `pip install -e ".[dev]"`
+3. Appliquer les migrations : `alembic upgrade head`
+4. Lancer l'app : `uvicorn app.main:app --reload`, puis ouvrir `http://localhost:8000`
+   (`/healthz` pour vérifier que l'app répond).
+5. Lancer les tests : `pytest`
+
+Déploiement (Fly.io, `fly.toml`) : `fly deploy` après avoir renommé `app` dans `fly.toml`
+(nom unique global sur Fly.io) et configuré les secrets (`fly secrets set DATABASE_URL=...`,
+etc. — jamais dans `fly.toml` ni dans le dépôt).
 
 ## 7. Pour aller plus loin
 

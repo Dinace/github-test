@@ -1,0 +1,15 @@
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file="config/credentials/.env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    database_url: str = "postgresql+psycopg://localhost/digitalisation_dev"
+    environment: str = "development"
+
+
+settings = Settings()

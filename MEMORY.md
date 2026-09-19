@@ -421,5 +421,49 @@ Format d'entrée suggéré :
   probablement similaire pour Moov Money) dans le plan de lancement.
 - Recalibrer les estimations de tokens de `docs/pricing-model.md` avec des mesures réelles
   une fois l'app en production.
-- Scaffolding applicatif réel (pyproject.toml, package partagé FastAPI, migrations Alembic,
-  Dockerfile pour Fly.io) non démarré.
+
+---
+
+## 2026-09-19 — Cadre de prix + scaffolding applicatif
+
+**Décisions techniques**
+- **Cadre de réflexion prix** ajouté à `docs/pricing-model.md` : plancher de coût variable
+  chiffré par pack (600–6 700 FCFA/mois selon le pack), distingué explicitement de la
+  disposition à payer réelle des clients gabonais (inconnue, nécessite une validation
+  terrain — entretiens clients, test de prix, pas une recherche web). Une fourchette
+  hypothèse de travail est proposée (Starter 8-15k, Business 20-35k, Premium 40-70k
+  FCFA/mois) mais explicitement marquée comme non validée.
+- **Scaffolding applicatif créé et testé** : package partagé `platform_core/` (config via
+  pydantic-settings lisant `config/credentials/.env`, accès DB SQLAlchemy, modèles `Client`
+  et `Subscription` — ce dernier avec `country`/`currency`/`payment_provider` en champs
+  paramétrables, pas codés en dur, conformément au principe multi-pays de CLAUDE.md §1) ;
+  app FastAPI + dashboard Jinja2/HTMX/Alpine/Tailwind (CDN, à remplacer par un build compilé
+  avant prod) dans `app/` ; migrations Alembic dans `migrations/` ; `Dockerfile` + `fly.toml`
+  pour le déploiement Fly.io (`config/` jamais copié dans l'image — secrets via Fly secrets
+  à l'exécution).
+- Validation réelle effectuée (pas seulement écrite) : installation des dépendances,
+  `pytest` (2 tests passent : `/healthz`, page d'accueil du dashboard), et
+  `alembic revision --autogenerate` testé avec succès contre une base SQLite jetable
+  (détecte bien les tables `clients`/`subscriptions`) — fichiers de test supprimés après
+  vérification, non commités.
+- Point d'attention documenté dans `CLAUDE.md` §4 : les dossiers `agents/<nom-agent>/` sont
+  en kebab-case, invalide comme nom de package Python — pas bloquant tant qu'ils ne
+  contiennent que de la documentation, mais à trancher avant d'y ajouter du code agent
+  (import par chemin de fichier vs renommage en snake_case).
+- `CLAUDE.md` §6 mis à jour avec les vraies instructions de lancement local et de
+  déploiement Fly.io.
+
+**État d'avancement par agent**
+- Plateforme : scaffolding applicatif exécutable pour la première fois (health check,
+  dashboard placeholder, modèle de données de base). Aucun code métier des 4 agents encore
+  implémenté — reste à faire.
+
+**Problèmes rencontrés / solutions**
+- Aucun ; tout a fonctionné du premier coup (venv Python 3.12, dépendances, tests, Alembic).
+
+**Questions ouvertes**
+- Implémenter le code métier des agents (Claude Agent SDK, prompts, outils) — non démarré,
+  dépend de la résolution du point de nommage kebab-case/snake_case ci-dessus.
+- Devis direct BSP (WhatsApp), contact Moov Money Gabon, prix d'abonnement final — inchangé,
+  voir entrées précédentes.
+- Recalibrer les estimations de coût une fois l'app en production.

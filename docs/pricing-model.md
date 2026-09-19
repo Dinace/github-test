@@ -100,6 +100,45 @@ prospect précisé.
 
 Sources : [WhatsApp Business API Pricing 2026 (Blueticks)](https://blueticks.co/blog/whatsapp-business-api-pricing-2026), [Pricing on the WhatsApp Business Platform (Meta for Developers)](https://developers.facebook.com/documentation/business-messaging/whatsapp/pricing), [Google Places API Pricing 2026 (Woosmap)](https://www.woosmap.com/blog/google-places-api-pricing), [Places API Usage and Billing (Google for Developers)](https://developers.google.com/maps/documentation/places/web-service/usage-and-billing), [Intégrer Airtel Money site web Gabon (Kolonell)](https://kolonell.com/fr/blog/integrer-airtel-money-site-web-gabon-libreville-2026), [Services Marchands Moov Money Gabon](https://moovmoney.ga/services/services-marchands/).
 
+## Cadre de réflexion pour le prix d'abonnement (pas un prix final)
+
+**Ce que je peux établir : le plancher de coût variable.** En combinant le coût Claude API,
+une estimation Google Places (Prospection) et une allocation modeste WhatsApp/infrastructure
+(taux indicatif ~610 FCFA/$) :
+
+| | Starter | Business | Premium |
+|---|---|---|---|
+| Plancher de coût variable estimé | ~600–1 200 FCFA/mois | ~1 800–3 600 FCFA/mois | ~3 600–6 700 FCFA/mois |
+
+À cela s'ajoute, une fois le prix fixé, ~2% de commission mobile money **sur le prix
+lui-même** (proportionnel, pas un montant fixe).
+
+**Ce que je ne peux pas établir : la disposition à payer réelle des PME/indépendants
+gabonais pour un abonnement récurrent.** Ce n'est pas une donnée qu'une recherche web permet
+de connaître de façon fiable — elle dépend du terrain (entretiens clients, test de prix,
+veille concurrentielle locale sur les agences web/community managers/prospecteurs
+freelances). Je ne vais pas inventer un chiffre "validé" ici.
+
+**Ancrage de valeur utilisable pour la discussion** : l'argument de vente n'est pas "moins
+cher que le coût de la plateforme" (déjà acquis, marge très confortable sur ce plan) mais
+"moins cher, en continu, que cumuler un développeur freelance (site, souvent facturé au
+forfait one-shot), un community manager freelance (forfait mensuel) et un commercial de
+prospection (salaire)" — la comparaison pertinente est contre ces alternatives locales, pas
+contre le coût interne de la plateforme.
+
+**Recommandation méthodologique** : ne pas figer un prix définitif sans test terrain. Fixer
+une fourchette hypothèse, la confronter à un petit nombre de prospects réels (entretiens ou
+test de prix type Van Westendorp), et ajuster avant un lancement à grande échelle. Exemple
+de fourchette de travail pour amorcer ce test (non validée, à ajuster) :
+
+| | Starter | Business | Premium |
+|---|---|---|---|
+| Fourchette hypothèse à tester | 8 000–15 000 FCFA/mois | 20 000–35 000 FCFA/mois | 40 000–70 000 FCFA/mois |
+
+Ces montants donnent une marge confortable au-dessus du plancher de coût variable estimé
+ci-dessus, mais **restent une hypothèse de travail à valider sur le terrain**, pas un prix
+décidé.
+
 ## Ce qui reste inconnu (pas une décision technique, nécessite un devis/contact direct)
 
 - Tarif WhatsApp Business par message pour les destinataires au Gabon (devis BSP).

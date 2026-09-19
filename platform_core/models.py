@@ -1,0 +1,54 @@
+import uuid
+from datetime import datetime
+from enum import Enum
+
+from sqlalchemy import DateTime, ForeignKey, String
+from sqlalchemy import Enum as SAEnum
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from platform_core.db import Base
+
+
+class Pack(str, Enum):
+    starter = "starter"
+    business = "business"
+    premium = "premium"
+
+
+class Client(Base):
+    """Un client de la plateforme (PME/indépendant)."""
+
+    __tablename__ = "clients"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(255))
+    sector: Mapped[str] = mapped_column(String(100))
+    # ISO 3166-1 alpha-2 ; "GA" = Gabon, pays de lancement (CLAUDE.md §1). Jamais codé en
+    # dur ailleurs dans l'app : ce champ pilote devise et moyens de paiement disponibles.
+    country: Mapped[str] = mapped_column(String(2), default="GA")
+    currency: Mapped[str] = mapped_column(String(3), default="XAF")  # ISO 4217
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    subscription: Mapped["Subscription | None"] = relationship(back_populates="client", uselist=False)
+
+
+class Subscription(Base):
+    """Abonnement actif d'un client à un pack (CLAUDE.md §1)."""
+
+    __tablename__ = "subscriptions"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    client_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("clients.id"))
+    pack: Mapped[Pack] = mapped_column(SAEnum(Pack, name="pack_enum"))
+    # Montant dans la plus petite unité de la devise (le FCFA n'a pas de sous-unité, donc
+    # c'est directement le montant en FCFA pour price_currency="XAF").
+    price_amount: Mapped[int] = mapped_column()
+    price_currency: Mapped[str] = mapped_column(String(3), default="XAF")
+    # Nom du provider actif pour ce client (ex. "orange_money", "airtel_money",
+    # "moov_money") — paramétrable par pays/client, jamais une liste figée (CLAUDE.md §1).
+    payment_provider: Mapped[str] = mapped_column(String(50))
+    active: Mapped[bool] = mapped_column(default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    client: Mapped["Client"] = relationship(back_populates="subscription")
