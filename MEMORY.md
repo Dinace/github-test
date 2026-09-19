@@ -378,3 +378,48 @@ Format d'entrée suggéré :
 - Scaffolding applicatif réel (pyproject.toml, package partagé FastAPI, migrations Alembic,
   Dockerfile pour Fly.io) non démarré — c'est la seule étape structurante restante avant de
   pouvoir exécuter quoi que ce soit.
+
+---
+
+## 2026-09-19 — Recherche de marché sur les points commerciaux restants
+
+**Décisions techniques**
+- Recherche web menée sur les 4 inconnues commerciales listées ci-dessus ; résultats ajoutés
+  dans `docs/pricing-model.md` (section "Données de marché").
+- **WhatsApp Business API** : correction importante — la tarification "à la conversation"
+  est obsolète depuis juillet 2025 ; le modèle actuel facture **au message envoyé**
+  (catégories marketing/utility/authentication), tarif dépendant du pays du destinataire.
+  Aucun tarif Gabon publié publiquement par Meta ; marge BSP typique 0,003–0,010 $/message
+  en plus. Un devis direct auprès d'un BSP couvrant le Gabon reste nécessaire.
+- **Google Places API** : Place Details ≈ 17–40 $/1000 requêtes selon les champs demandés ;
+  impact estimé sur le pack Premium (60 fiches/mois) : ~1,20–2,40 $/mois/client — plus
+  significatif que le coût Claude API mais reste modeste.
+- **Airtel Money Gabon** : donnée concrète trouvée — intégration marchande facturée
+  **350 000 à 600 000 FCFA en coût ponctuel** (délai 3–5 jours, majoritairement KYC), puis
+  **~2% de commission sur le volume collecté**. Premier chiffre concret à intégrer au
+  business plan.
+- **Moov Money Gabon** : produit marchand confirmé existant, mais aucune grille de frais
+  publique trouvée — contact direct nécessaire.
+- Aucune modification des décisions de conception (workflow de validation avant tout envoi
+  WhatsApp inchangé, cf. `skills/README.md` des agents Réseaux sociaux et Prospection) —
+  seul le modèle de facturation sous-jacent est corrigé, pas le produit.
+
+**État d'avancement par agent**
+- Inchangé (aucun code applicatif).
+
+**Problèmes rencontrés / solutions**
+- Recherche web ne fournit pas de tarif Gabon exact pour WhatsApp (dépend du destinataire,
+  pas publié par pays hors grands marchés) ni de grille de frais Moov Money — ces deux
+  points nécessitent un contact/devis direct, pas seulement de la recherche.
+
+**Questions ouvertes**
+- Devis direct BSP pour le tarif WhatsApp Business par message, destinataires au Gabon.
+- Contact direct Moov Money Gabon pour la grille de commission marchande ; reconfirmer
+  celle d'Orange Money.
+- Prix d'abonnement final par pack en FCFA — décision commerciale, pas technique.
+- Budgéter le coût d'intégration paiement (~350–600k FCFA pour Airtel Money, montant
+  probablement similaire pour Moov Money) dans le plan de lancement.
+- Recalibrer les estimations de tokens de `docs/pricing-model.md` avec des mesures réelles
+  une fois l'app en production.
+- Scaffolding applicatif réel (pyproject.toml, package partagé FastAPI, migrations Alembic,
+  Dockerfile pour Fly.io) non démarré.

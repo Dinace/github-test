@@ -56,22 +56,57 @@ d'abonnement plausible pour ce marché. **Les quotas définis dans CLAUDE.md §1
 validés du point de vue du coût Claude API.**
 
 Les vrais leviers de coût à surveiller sont ailleurs :
-- **WhatsApp Business API** : tarification à la conversation, variable selon le pays et la
-  catégorie de message — **inconnue pour le Gabon**, à obtenir avant de fixer le prix final.
-- **Google Places API** (si utilisée par l'agent Prospection pour la recherche) : facturée
-  à la requête, potentiellement plus significative à volume élevé sur le pack Premium (60
-  fiches/mois) — à chiffrer une fois l'intégration précisée.
+- **WhatsApp Business API**, **Google Places API**, **paiement mobile money** : voir données
+  de marché ci-dessous (recherche web, 2026-09-19) — partiellement chiffrables, un devis
+  direct reste nécessaire pour les montants précis au Gabon.
 - **Infrastructure** (Fly.io, R2) : coût partagé entre tous les clients, pas un coût
   marginal linéaire par client à ce stade — à revisiter une fois un volume de clients réel
   connu.
 - **Temps humain** (support, onboarding, validation des contenus sensibles) : coût réel non
   capturé par ce modèle, à budgéter séparément.
 
-## Ce qui reste inconnu (pas une décision technique, nécessite des données réelles)
+## Données de marché (recherche web, 2026-09-19)
 
-- Tarification WhatsApp Business API par conversation au Gabon.
-- Coût réel de l'intégration Google Places API selon le volume de requêtes de l'agent
-  Prospection.
+**WhatsApp Business API** — le modèle a changé depuis juillet 2025 : ce n'est plus une
+tarification "à la conversation" mais **au message envoyé** (catégories marketing/utility/
+authentication), tarif dépendant du **pays du destinataire** (pas de l'expéditeur). Exemples
+trouvés : Inde ~0,009 $/message, Brésil ~0,063 $, US ~0,025 $, UAE ~0,050 $ — aucun tarif
+Gabon publié publiquement par Meta. À cela s'ajoute une marge de la plateforme d'envoi (BSP,
+"Business Solution Provider") de l'ordre de 0,003–0,010 $/message. **Action requise** :
+obtenir un devis direct d'un BSP couvrant le Gabon avant de fixer le prix final des packs
+Business/Premium (le calcul devra être refait poste "au message", pas "à la conversation"
+comme supposé initialement dans les sections Réseaux sociaux/Prospection des `skills/
+README.md`).
+
+**Google Places API** (Place Details, pertinent pour l'agent Prospection) : environ
+17–20 $/1000 requêtes pour les champs de base, jusqu'à 35–40 $/1000 avec avis et horaires
+d'ouverture inclus. Un quota gratuit mensuel existe (de l'ordre de 1000 requêtes/mois en
+tier Enterprise). Estimation d'impact sur le pack Premium (60 fiches/mois) : entre ~1,20 $
+et ~2,40 $/mois/client selon les champs demandés — plus significatif que le coût Claude API
+mais reste modeste. À confirmer une fois le champ de données exact nécessaire par fiche
+prospect précisé.
+
+**Paiement mobile money au Gabon** :
+- **Airtel Money** (≈40% des comptes mobile money au Gabon) : intégration marchande
+  (Collections API + webhook) facturée **350 000 à 600 000 FCFA en coût d'intégration
+  ponctuel** (délai 3 à 5 jours, principalement lié à la validation KYC du compte marchand),
+  puis **environ 2% de commission sur le volume collecté**. Donnée concrète à intégrer au
+  business plan (coût fixe de mise en route + coût variable récurrent sur les encaissements).
+- **Moov Money** : un produit marchand ("Moov Money Online") existe et un SDK tiers (PHP)
+  est documenté publiquement, mais aucune grille de frais/commission n'a été trouvée
+  publiquement — nécessite un contact direct avec Moov Money Gabon pour obtenir les
+  conditions marchandes.
+- **Orange Money** : non re-vérifié dans cette recherche, à confirmer de la même manière.
+
+Sources : [WhatsApp Business API Pricing 2026 (Blueticks)](https://blueticks.co/blog/whatsapp-business-api-pricing-2026), [Pricing on the WhatsApp Business Platform (Meta for Developers)](https://developers.facebook.com/documentation/business-messaging/whatsapp/pricing), [Google Places API Pricing 2026 (Woosmap)](https://www.woosmap.com/blog/google-places-api-pricing), [Places API Usage and Billing (Google for Developers)](https://developers.google.com/maps/documentation/places/web-service/usage-and-billing), [Intégrer Airtel Money site web Gabon (Kolonell)](https://kolonell.com/fr/blog/integrer-airtel-money-site-web-gabon-libreville-2026), [Services Marchands Moov Money Gabon](https://moovmoney.ga/services/services-marchands/).
+
+## Ce qui reste inconnu (pas une décision technique, nécessite un devis/contact direct)
+
+- Tarif WhatsApp Business par message pour les destinataires au Gabon (devis BSP).
+- Grille de commission Moov Money Gabon (contact direct nécessaire) et reconfirmation de
+  celle d'Orange Money.
 - Prix d'abonnement final par pack (en FCFA) — décision commerciale, pas technique.
 - Mesure réelle des tokens consommés par action une fois l'app en production (ces
   estimations doivent être recalibrées avec `response.usage` réel, pas seulement supposées).
+- Budget d'intégration paiement à prévoir dès le lancement : ~350–600k FCFA pour Airtel
+  Money seul, montant équivalent probable pour Moov Money une fois ses conditions connues.
