@@ -13,6 +13,28 @@ via un pilotage par agents IA, sur abonnement mensuel décliné en **3 packs** :
 - **Business**
 - **Premium**
 
+### Pays de lancement et scalabilité multi-pays
+
+**Pays de lancement : Gabon.** L'objectif est de pouvoir étendre la plateforme à d'autres
+pays africains ensuite, donc les décisions ci-dessous sont prises pour rester valables au
+Gabon dès le lancement tout en restant extensibles, plutôt que de figer des choix
+spécifiques à un seul pays dans le code ou la donnée.
+
+Implications concrètes à respecter dans toute implémentation :
+- **Moyens de paiement** : paramétrables par pays, pas une liste fixe pour toute la
+  plateforme. Au Gabon : Orange Money, Airtel Money, Moov Money. MTN Mobile Money et Wave
+  sont documentés dans `config/credentials/` mais réservés à de futurs pays où ils opèrent
+  (MTN n'est pas présent au Gabon ; Wave y est non confirmé).
+- **Devise** : le Gabon utilise le FCFA (XAF). Le pricing/la facturation doivent prévoir un
+  champ devise par pays/client dès le modèle de données, pas une devise codée en dur.
+- **Langue** : le français convient au Gabon et à une large partie de l'Afrique francophone
+  (Ouest et Centre) ; l'extension vers des pays anglophones ou lusophones nécessitera une
+  gestion multilingue (contenu généré et dashboard) — non requise pour le lancement, mais à
+  ne pas bloquer par des chaînes de caractères codées en dur dans le code applicatif.
+- **Conformité légale** (agent Prospection notamment) : les règles de protection des
+  données diffèrent par pays (au Gabon, autorité de référence : CNPDCP). Les textes de
+  conformité doivent être paramétrables par pays plutôt qu'un texte générique "Afrique".
+
 ### Détail des packs
 
 Logique de montée en gamme progressive : chaque pack ajoute des agents et des capacités, pas

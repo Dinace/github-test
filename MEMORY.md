@@ -247,3 +247,45 @@ Format d'entrée suggéré :
   sauvegardes (Maintenance).
 - Scaffolding applicatif réel (pyproject.toml, package partagé FastAPI, migrations Alembic,
   Dockerfile pour Fly.io) non démarré.
+
+---
+
+## 2026-09-19 — Pays de lancement (Gabon) et scalabilité multi-pays
+
+**Décisions techniques**
+- Pays de lancement confirmé par l'utilisateur : **Gabon**, avec objectif explicite de
+  scaler vers d'autres pays africains ensuite. `CLAUDE.md` §1 complété avec une section
+  "Pays de lancement et scalabilité multi-pays" listant les implications concrètes
+  (paiement, devise, langue, conformité) à respecter dès l'implémentation pour ne pas
+  bloquer l'extension future.
+- Correction de la liste des moyens de paiement : **MTN n'opère pas au Gabon** et la
+  présence de **Wave** n'y est pas confirmée (surtout présent en Afrique de l'Ouest).
+  Ajout de `AIRTEL_MONEY_API_KEY` et `MOOV_MONEY_API_KEY` (opérateurs réellement présents
+  au Gabon, avec Orange Money) dans `config/credentials/README.md` et `.env.example`.
+  `MTN_MOMO_API_KEY`/`WAVE_API_KEY` conservés mais marqués "réservés" pour une future
+  extension vers des pays où ces opérateurs sont présents, plutôt que supprimés.
+- Principe posé pour la suite : moyens de paiement, devise et conformité légale doivent être
+  **paramétrables par pays** dans le modèle de données/l'architecture, pas codés en dur pour
+  un seul pays — à respecter dès le scaffolding applicatif (ex. champ pays/devise sur le
+  client, sélection des providers de paiement actifs par pays).
+- Le français reste la langue par défaut adaptée au Gabon et à l'Afrique francophone ; le
+  multilingue est noté comme besoin futur (pays anglophones/lusophones), non requis pour le
+  lancement mais à ne pas bloquer par du texte codé en dur dans le code applicatif.
+
+**État d'avancement par agent**
+- Inchangé (aucun code applicatif).
+
+**Problèmes rencontrés / solutions**
+- Aucun.
+
+**Questions ouvertes**
+- Génération 100% statique vs sections semi-dynamiques pour les sites clients (Création de
+  site).
+- Mécanisme de prévisualisation/validation du site par le client avant mise en ligne.
+- Sources publiques autorisées et critères de scoring (Prospection), format du
+  brief/validation avant publication (Réseaux sociaux), politique de rétention des
+  sauvegardes (Maintenance).
+- Confirmer précisément les conditions d'intégration Airtel Money/Moov Money Gabon
+  (documentation API, éligibilité marchande) avant implémentation.
+- Scaffolding applicatif réel (pyproject.toml, package partagé FastAPI, migrations Alembic,
+  Dockerfile pour Fly.io) non démarré.
