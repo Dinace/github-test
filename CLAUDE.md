@@ -1,0 +1,127 @@
+# CLAUDE.md — Plateforme de digitalisation pour PME/indépendants (Afrique)
+
+Ce document est la référence pour tout agent IA (Claude Code ou autre) intervenant sur ce
+projet. Il doit être lu en entier avant toute intervention. Voir aussi `MEMORY.md` pour
+l'historique des décisions et l'état d'avancement.
+
+## 1. Description et positionnement
+
+La plateforme permet à des **PME et indépendants en Afrique** de digitaliser leur activité
+via un pilotage par agents IA, sur abonnement mensuel décliné en **3 packs** :
+
+- **Starter**
+- **Business**
+- **Premium**
+
+Le détail de ce qui est inclus dans chaque pack (quels agents, quels quotas, quelles
+fonctionnalités) reste à définir et sera documenté ici une fois figé.
+
+## 2. Les 4 agents de la plateforme
+
+| Agent | Rôle |
+|---|---|
+| **Création de site** | Génère un site web pour le client à partir d'un brief (secteur d'activité, contenu, identité visuelle), en s'appuyant sur des templates par secteur. |
+| **Réseaux sociaux** | Génère du contenu (textes, visuels), planifie un calendrier de publication, et publie via les API des réseaux sociaux (Meta, WhatsApp Business) — uniquement sur validation préalable d'un brief ou d'un contenu. |
+| **Maintenance** | Surveille les sites/comptes clients : monitoring, sauvegardes, sécurité, détection de bugs/anomalies. |
+| **Prospection commerciale** | Recherche des prospects sur des supports publics, crée des fiches prospect, applique un scoring/filtrage, génère des supports visuels d'offre. |
+
+Chaque agent a un périmètre de données et de code strictement cloisonné (voir section 5).
+L'arborescence est :
+
+```
+agents/
+  creation-site/skills/README.md
+  reseaux-sociaux/skills/README.md
+  maintenance/skills/README.md
+  prospection/skills/README.md
+```
+
+Chaque `skills/README.md` documente les skills/frameworks/librairies retenus pour l'agent
+concerné, avec justification, points encore à trancher, et rappel des permissions qui lui
+sont propres.
+
+## 3. Stack technique
+
+- **Langage/runtime principal** : Python.
+- **Orchestration des agents IA** : Claude Agent SDK (agents outillés, mémoire, actions).
+- **Base de données** : PostgreSQL (SQLAlchemy + Alembic pour les migrations), avec des
+  colonnes JSONB pour le contenu semi-structuré et variable par agent (structure de site
+  généré, contenu réseaux sociaux, champs libres de fiche prospect).
+- **Architecture du dépôt** : monorepo. Un seul dépôt pour la plateforme et les 4 agents,
+  avec un cloisonnement strict par dossier (`agents/<nom-agent>/`, voir section 2) plutôt
+  que par dépôt séparé. Le code partagé entre agents (auth, facturation, accès base de
+  données, mémoire commune) sera isolé dans un package partagé dédié le moment venu — pas
+  encore créé à ce stade.
+
+**Encore à trancher** (non bloquant pour la suite de la mise en place, mais à définir avant
+le développement applicatif réel) : framework frontend du dashboard client, approche
+technique précise de génération de site (voir `agents/creation-site/skills/README.md`),
+hébergement/infrastructure de production.
+
+Tant que le scaffolding applicatif (pyproject.toml, package Python, migrations) n'existe
+pas, aucun agent IA ne doit générer de code d'implémentation définitif au-delà de la
+structure de fichiers et de la documentation.
+
+## 4. Conventions du projet
+
+- **Langue** : documentation et commits en français ; noms de variables/fonctions en anglais
+  (à confirmer une fois la stack fixée).
+- **Commits** : messages descriptifs, impératif présent (ex. "Ajoute le scoring des
+  prospects"), un commit = un changement cohérent.
+- **Branches** : une branche de travail par tâche/fonctionnalité, jamais de commit direct
+  sur la branche principale sans revue.
+- **Secrets** : jamais de secret, clé ou token en clair dans le dépôt (voir section 5 et
+  `config/credentials/README.md`).
+- **Structure de dossiers, nommage de fichiers, style de code** : à définir une fois la
+  stack technique choisie (section 3).
+
+## 5. Sécurité et permissions des agents IA
+
+### Ce que tout agent A LE DROIT de faire
+
+- Lire et écrire dans son propre périmètre de données (site du client pour l'agent Création
+  de site, contenu réseaux sociaux pour l'agent Réseaux sociaux, fiche prospect pour l'agent
+  Prospection, etc.).
+- Appeler les API externes nécessaires à sa mission, en utilisant les clés stockées dans
+  `config/credentials/` (jamais en dur dans le code).
+- Générer du contenu (textes, visuels, code de site) à partir des briefs clients.
+- Notifier un humain (l'équipe projet) en cas de décision sensible ou d'anomalie détectée.
+- Consulter et mettre à jour `MEMORY.md` pour la partie qui concerne son propre périmètre.
+
+### Ce qu'AUCUN agent N'A LE DROIT de faire
+
+- Exécuter un paiement réel ou modifier un montant facturé sans validation humaine explicite.
+- Supprimer des données client (site, fiche prospect, contenu) sans confirmation humaine.
+- Contacter un prospect classé **"non favorable"** ou **"non joignable"** après filtrage par
+  l'agent Prospection.
+- Publier du contenu sur les réseaux sociaux d'un client sans qu'un brief ou une validation
+  préalable existe pour ce contenu précis.
+- Modifier le code ou la configuration d'un **autre agent** que le sien (cloisonnement
+  strict entre agents).
+- Stocker, lire ou transmettre la **clé API Claude** — celle-ci est gérée exclusivement en
+  dehors de `config/credentials/`, séparément par l'équipe projet.
+- Committer un secret, une clé ou un token dans le dépôt Git, sous quelque forme que ce soit
+  (y compris dans des logs, des exemples ou des messages de commit).
+
+Ces règles s'appliquent à tout agent IA travaillant sur ce projet, qu'il s'agisse d'un des
+4 agents métier de la plateforme ou d'un agent de développement (ex. Claude Code) qui
+intervient sur le code du projet lui-même.
+
+## 6. Lancer et tester le projet en local
+
+Le scaffolding applicatif (pyproject.toml, package Python, migrations) n'est pas encore
+créé — cette section sera complétée dès qu'il existera. Ce qui est déjà fixé :
+
+- Copier `config/credentials/.env.example` vers `config/credentials/.env` et renseigner les
+  vraies valeurs (jamais commitées).
+- La clé API Claude n'est **jamais** placée dans `config/credentials/` : elle est fournie à
+  l'exécution par un mécanisme séparé (variable d'environnement gérée hors dépôt), documenté
+  ultérieurement.
+
+## 7. Pour aller plus loin
+
+- `MEMORY.md` : historique des décisions, état d'avancement par agent, problèmes rencontrés.
+- `config/credentials/README.md` : liste des clés/API attendues par agent (sans valeurs
+  réelles).
+- `agents/<nom-agent>/skills/README.md` : skills, frameworks et librairies retenus pour
+  chaque agent, avec justification (à créer une fois la stack fixée).
