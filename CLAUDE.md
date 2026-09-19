@@ -89,9 +89,23 @@ sont propres.
     Limite assumée : moins adapté qu'un SPA (ex. Next.js) si le dashboard devait devenir
     très riche en interactions temps réel ; à réévaluer si ce besoin apparaît concrètement.
 
+- **Hébergement/infrastructure de production** :
+  - **Fly.io** pour l'app (FastAPI + dashboard) et PostgreSQL managé. Choisi pour sa région
+    Afrique du Sud (Johannesburg) qui réduit la latence pour les utilisateurs africains,
+    un déploiement simple (Docker) et un coût maîtrisé, adaptés à une petite équipe.
+  - **Cloudflare (R2 + CDN)** pour le stockage objet (sites clients générés, backups,
+    fichiers) et leur diffusion. Choisi pour ses nombreux points de présence en Afrique
+    (rapproche les sites clients de leurs visiteurs) et l'absence de frais de sortie
+    (egress) sur R2.
+  - Alternatives écartées pour l'instant : AWS af-south-1 (plus puissant/scalable mais trop
+    complexe et coûteux à opérer pour une petite équipe qui démarre) ; Render/DigitalOcean
+    (très simples mais sans région africaine, donc latence plus élevée pour l'app elle-même
+    sans CDN devant). À reconsidérer si le volume d'utilisateurs ou les besoins de montée en
+    charge le justifient.
+
 **Encore à trancher** (non bloquant pour la suite de la mise en place, mais à définir avant
 le développement applicatif réel) : approche technique précise de génération de site (voir
-`agents/creation-site/skills/README.md`), hébergement/infrastructure de production.
+`agents/creation-site/skills/README.md`).
 
 Tant que le scaffolding applicatif (pyproject.toml, package Python, migrations) n'existe
 pas, aucun agent IA ne doit générer de code d'implémentation définitif au-delà de la

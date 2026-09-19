@@ -28,12 +28,14 @@ transmettre ou la journaliser.
 | `WHATSAPP_BUSINESS_TOKEN` | WhatsApp Business API | Agent Réseaux sociaux, Agent Prospection (notifications) | Envoi de messages/notifications côté client, jamais de démarchage de prospects filtrés "non favorable"/"non joignable". |
 | `GOOGLE_ADS_TOKEN` | Google Ads | Agent Réseaux sociaux | Campagnes publicitaires, sur validation préalable uniquement. |
 | `GOOGLE_BUSINESS_PROFILE_TOKEN` | Google Business Profile | Agent Réseaux sociaux, Agent Création de site | Fiche établissement du client, référencement local. |
-| `DATABASE_URL` | PostgreSQL | Plateforme (tous les agents, via la couche d'accès aux données) | Connexion à la base de données. |
+| `DATABASE_URL` | PostgreSQL managé (Fly Postgres) | Plateforme (tous les agents, via la couche d'accès aux données) | Connexion à la base de données. |
 | `SENTRY_DSN` | Sentry (ou équivalent) | Agent Maintenance | Détection et remontée d'anomalies/bugs. |
 | `UPTIME_MONITOR_TOKEN` | Service de monitoring (ex. UptimeRobot) | Agent Maintenance | Surveillance de disponibilité des sites clients. |
-| `BACKUP_STORAGE_KEY` | Stockage objet (backups) | Agent Maintenance | Sauvegardes des sites/données clients. |
+| `FLY_API_TOKEN` | Fly.io | Infrastructure (déploiement/CI-CD) | Déploiement de l'app et de la base ; non consommée par un agent métier à l'exécution. |
+| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare | Agent Création de site, Agent Maintenance | Identifiant de compte Cloudflare (R2 + CDN). |
+| `CLOUDFLARE_R2_ACCESS_KEY_ID` / `CLOUDFLARE_R2_SECRET_ACCESS_KEY` | Cloudflare R2 | Agent Création de site, Agent Maintenance | Stockage/diffusion des sites clients générés et des sauvegardes. |
+| `CLOUDFLARE_R2_BUCKET` | Cloudflare R2 | Agent Création de site, Agent Maintenance | Nom du bucket R2 utilisé. |
 
-Cette liste sera complétée au fil du projet (ex. clé de génération d'images, service
-d'hébergement des sites générés, etc.) — toute nouvelle clé doit être ajoutée ici et dans
-`.env.example` avant d'être utilisée par un agent, avec une entrée correspondante dans
-`MEMORY.md`.
+Cette liste sera complétée au fil du projet (ex. clé de génération d'images, etc.) — toute
+nouvelle clé doit être ajoutée ici et dans `.env.example` avant d'être utilisée par un
+agent, avec une entrée correspondante dans `MEMORY.md`.

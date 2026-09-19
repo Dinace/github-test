@@ -163,9 +163,45 @@ Format d'entrée suggéré :
 - Aucun.
 
 **Questions ouvertes**
-- Hébergement/infrastructure de production.
 - Approche technique précise de génération de site (catalogue de templates par secteur).
 - Sources publiques autorisées et critères de scoring (Prospection), format du
   brief/validation avant publication (Réseaux sociaux), politique de rétention des
   sauvegardes (Maintenance).
 - Scaffolding applicatif réel (pyproject.toml, package partagé, migrations) non démarré.
+
+---
+
+## 2026-09-19 — Hébergement de production
+
+**Décisions techniques**
+- **Fly.io** retenu pour héberger l'app (FastAPI + dashboard) et PostgreSQL managé —
+  choix utilisateur parmi les options recommandées. Critère décisif : région Afrique du Sud
+  (Johannesburg) qui réduit la latence pour les utilisateurs cibles, déploiement Docker
+  simple, coût maîtrisé pour une petite équipe.
+- **Cloudflare (R2 + CDN)** retenu pour le stockage objet (sites clients générés, backups)
+  et leur diffusion — choix utilisateur. Critère décisif : nombreux points de présence en
+  Afrique, pas de frais de sortie (egress) sur R2.
+- Alternatives écartées : AWS af-south-1 (trop complexe/coûteux pour le stade actuel),
+  Render/DigitalOcean (pas de région africaine).
+- `CLAUDE.md` §3 mis à jour ; toutes les décisions de stack de la section 3 sont désormais
+  actées, hors approche technique précise de génération de site.
+- `config/credentials/README.md` et `.env.example` mis à jour : ajout de `FLY_API_TOKEN`
+  (infrastructure/CI-CD, pas un agent métier) et des variables Cloudflare R2
+  (`CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_R2_ACCESS_KEY_ID`,
+  `CLOUDFLARE_R2_SECRET_ACCESS_KEY`, `CLOUDFLARE_R2_BUCKET`), en remplacement de l'ancien
+  `BACKUP_STORAGE_KEY` générique.
+
+**État d'avancement par agent**
+- Inchangé (skills documentées pour les 4 agents, aucun code applicatif).
+
+**Problèmes rencontrés / solutions**
+- Aucun.
+
+**Questions ouvertes**
+- Approche technique précise de génération de site (catalogue de templates par secteur).
+- Sources publiques autorisées et critères de scoring (Prospection), format du
+  brief/validation avant publication (Réseaux sociaux), politique de rétention des
+  sauvegardes (Maintenance).
+- Scaffolding applicatif réel (pyproject.toml, package partagé FastAPI, migrations Alembic,
+  Dockerfile pour Fly.io) non démarré — c'est la prochaine étape naturelle, toute la stack
+  étant maintenant fixée.
