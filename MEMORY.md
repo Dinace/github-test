@@ -337,3 +337,44 @@ Format d'entrée suggéré :
 - Scaffolding applicatif réel (pyproject.toml, package partagé FastAPI, migrations Alembic,
   Dockerfile pour Fly.io) non démarré — c'est la seule étape structurante restante avant de
   pouvoir exécuter quoi que ce soit.
+
+---
+
+## 2026-09-19 — Validation des quotas chiffrés via le coût réel de l'API Claude
+
+**Décisions techniques**
+- Consultation des tarifs actuels de l'API Claude (skill `claude-api`) : Sonnet 5 à 2 $/10 $
+  par million de tokens (input/output), Haiku 4.5 à 1 $/5 $.
+- Création de `docs/pricing-model.md` : modèle de coût unitaire par action d'agent (site,
+  post, fiche prospect, support d'offre), avec hypothèses de volumétrie de tokens
+  explicitement documentées comme estimations de travail à recalibrer avec l'usage réel.
+- Résultat : le coût Claude API par client reste **sous 1 $/mois même sur Premium**
+  (~0,09 $ Starter, ~0,33 $ Business, ~0,79 $ Premium) — **les quotas définis dans
+  CLAUDE.md §1 sont donc validés du point de vue du coût API Claude**, qui n'est pas le
+  facteur limitant de la viabilité des packs.
+- Choix de modèle par défaut documenté dans `docs/pricing-model.md` : Haiku 4.5 pour les
+  tâches courtes/répétitives (posts, fiches prospect), Sonnet 5 pour les tâches demandant
+  plus de qualité rédactionnelle (contenu de site, supports d'offre) — choix de coût,
+  réévaluable si la qualité observée en pratique est insuffisante.
+- Les vrais leviers de coût identifiés comme non encore chiffrés : tarification WhatsApp
+  Business API par conversation au Gabon, coût Google Places API selon le volume de l'agent
+  Prospection, coût infrastructure à l'échelle, temps humain (support/onboarding).
+- `CLAUDE.md` §1 mis à jour pour refléter cette validation partielle des quotas.
+
+**État d'avancement par agent**
+- Inchangé (aucun code applicatif).
+
+**Problèmes rencontrés / solutions**
+- Aucun.
+
+**Questions ouvertes**
+- Tarification WhatsApp Business API par conversation au Gabon (à obtenir avant de fixer le
+  prix final des packs).
+- Coût Google Places API selon le volume réel de requêtes de l'agent Prospection.
+- Prix d'abonnement final par pack en FCFA — décision commerciale, pas technique.
+- Confirmer précisément les conditions d'intégration Airtel Money/Moov Money Gabon.
+- Recalibrer les estimations de tokens de `docs/pricing-model.md` avec des mesures réelles
+  (`response.usage`) une fois l'app en production.
+- Scaffolding applicatif réel (pyproject.toml, package partagé FastAPI, migrations Alembic,
+  Dockerfile pour Fly.io) non démarré — c'est la seule étape structurante restante avant de
+  pouvoir exécuter quoi que ce soit.

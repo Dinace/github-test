@@ -55,8 +55,10 @@ Décisions actées avec l'utilisateur :
   plus central pour aider les clients à trouver des clients, d'où son rôle de
   différenciateur pour les packs payants supérieurs plutôt qu'un accès dilué dès l'entrée
   de gamme.
-- Les quotas ci-dessus restent à valider une fois les coûts API réels connus (voir
-  `MEMORY.md`).
+- Quotas validés du point de vue du coût **API Claude** (négligeable, < 1 $/mois/client
+  même sur Premium — voir `docs/pricing-model.md`). Restent à valider : coût WhatsApp
+  Business API au Gabon, coût Google Places API si utilisée par l'agent Prospection, et le
+  prix d'abonnement final par pack (décision commerciale, voir `docs/pricing-model.md`).
 
 ## 2. Les 4 agents de la plateforme
 
@@ -196,3 +198,5 @@ créé — cette section sera complétée dès qu'il existera. Ce qui est déjà
   réelles).
 - `agents/<nom-agent>/skills/README.md` : skills, frameworks et librairies retenus pour
   chaque agent, avec justification (à créer une fois la stack fixée).
+- `docs/pricing-model.md` : modèle de coût unitaire par pack (coût API Claude par action
+  d'agent), utilisé pour valider les quotas de la section 1.
