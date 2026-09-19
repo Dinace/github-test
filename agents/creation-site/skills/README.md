@@ -39,13 +39,29 @@ Secteurs volontairement exclus du MVP (à ajouter plus tard selon la demande ré
 clients) : agriculture/agroalimentaire, ONG/associations, et tout autre secteur non listé —
 ils utilisent le template générique en attendant.
 
+## Génération et publication (tranché)
+
+- **Génération 100% statique (JAMstack)** : chaque site est produit en HTML/CSS statique à
+  chaque publication/mise à jour, stocké sur Cloudflare R2 + CDN (CLAUDE.md §3). Pas de
+  rendu serveur par page vue : rapide à charger (important vu la connectivité mobile
+  variable), peu coûteux à scaler, surface d'attaque réduite.
+  - Le besoin de "dynamique" est couvert sans backend par page : formulaire de contact
+    soumis en JS vers un endpoint FastAPI dédié (ex. `POST /leads`) qui enregistre le
+    message ; réservation/commande via lien direct `wa.me/<numéro>?text=...` (WhatsApp),
+    déjà l'usage dominant dans le marché cible.
+- **Cycle brouillon → validation → publication**, standard des outils de site-building :
+  1. L'agent génère/regénère le site dans un espace de **brouillon** (préfixe `draft/` sur
+     R2), jamais directement en production.
+  2. Le client consulte l'aperçu via une URL de prévisualisation depuis le dashboard.
+  3. Le client valide ("Publier") ou demande des retouches (l'agent régénère le brouillon).
+  4. La validation déclenche la promotion du contenu de `draft/` vers `live/` (URL publique
+     définitive du client). Aucune mise à jour, initiale ou ultérieure, ne passe en
+     production sans ce passage par la validation du client.
+
 ## Points à trancher avant implémentation
 
-- Mode de publication/hébergement des sites générés : **tranché** — stockage statique sur
-  Cloudflare R2 + CDN (voir CLAUDE.md §3). Reste à définir : génération 100% statique au
-  build, ou pages semi-dynamiques servies par l'app FastAPI pour certaines sections
-  (ex. formulaire de réservation).
-- Mécanisme de prévisualisation/validation du site par le client avant mise en ligne.
+- Détail technique de la promotion `draft/` → `live/` (copie objet par objet vs bascule
+  d'un pointeur/alias) — choix d'implémentation, pas bloquant pour la conception.
 
 ## Rappel des permissions (voir CLAUDE.md §5)
 

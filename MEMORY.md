@@ -289,3 +289,51 @@ Format d'entrée suggéré :
   (documentation API, éligibilité marchande) avant implémentation.
 - Scaffolding applicatif réel (pyproject.toml, package partagé FastAPI, migrations Alembic,
   Dockerfile pour Fly.io) non démarré.
+
+---
+
+## 2026-09-19 — Décisions produit restantes tranchées sur les meilleures pratiques
+
+**Décisions techniques**
+- À la demande de l'utilisateur ("le meilleur qui se fait"), Claude tranche les points
+  produit encore ouverts en s'appuyant sur les pratiques standards du secteur, documentés
+  dans les `skills/README.md` de chaque agent concerné :
+- **Création de site** : génération **100% statique (JAMstack)** sur Cloudflare R2 + CDN ;
+  dynamique géré sans backend par page (formulaire de contact → endpoint FastAPI, réservation
+  → lien WhatsApp `wa.me`). Cycle **brouillon → validation client → publication** (préfixe
+  `draft/` puis promotion vers `live/` sur validation), aucune mise à jour ne saute cette
+  étape.
+- **Prospection** : sources autorisées limitées aux **API officielles en priorité**
+  (Google Places API, Meta Graph API) et annuaires publics respectant leur `robots.txt` ;
+  **LinkedIn explicitement interdit** (ToS). Scoring par règles pondérées et auditables
+  (coordonnées valides, absence de site existant, adéquation sectorielle, signaux
+  d'activité récente) déterminant les 4 catégories déjà actées. Premier contact via
+  WhatsApp Business, avec le même principe de validation humaine que l'agent Réseaux
+  sociaux.
+- **Réseaux sociaux** : brief structuré (objectif, ton, éléments obligatoires, visuel,
+  date) et workflow à statuts `brouillon → en attente de validation → validé → planifié →
+  publié`, seule la transition `validé → publié` déclenche l'appel API réel. Portée MVP
+  limitée à Meta + WhatsApp Business (Google Ads différé).
+- **Maintenance** : rétention des sauvegardes en rotation grand-père/père/fils alignée sur
+  la fréquence par pack (Starter : 3 mois ; Business : ~2 mois hebdo + 3 mois mensuel
+  dérivé ; Premium : 30 jours + 12 semaines + 6 mois). Seuils de notification humaine
+  précisés (site down 15 min, erreur répétée ≥5×/h, échec de backup immédiat, faille
+  haute/critique immédiate). Processus de restauration : l'agent propose, un humain
+  confirme explicitement, jamais d'exécution automatique (cohérent avec CLAUDE.md §5).
+  Référence `BACKUP_STORAGE_KEY` (obsolète) corrigée vers les variables `CLOUDFLARE_R2_*`.
+
+**État d'avancement par agent**
+- Les 4 agents ont désormais une conception produit complète (skills, périmètre,
+  permissions, workflows) ; aucun code applicatif n'existe encore.
+
+**Problèmes rencontrés / solutions**
+- Aucun.
+
+**Questions ouvertes**
+- Confirmer précisément les conditions d'intégration Airtel Money/Moov Money Gabon
+  (documentation API, éligibilité marchande) — nécessite une vérification factuelle, pas
+  une décision de conception.
+- Valider les quotas chiffrés des packs une fois les coûts API réels connus.
+- Scaffolding applicatif réel (pyproject.toml, package partagé FastAPI, migrations Alembic,
+  Dockerfile pour Fly.io) non démarré — c'est la seule étape structurante restante avant de
+  pouvoir exécuter quoi que ce soit.
