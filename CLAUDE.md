@@ -103,9 +103,9 @@ sont propres.
     sans CDN devant). À reconsidérer si le volume d'utilisateurs ou les besoins de montée en
     charge le justifient.
 
-**Encore à trancher** (non bloquant pour la suite de la mise en place, mais à définir avant
-le développement applicatif réel) : approche technique précise de génération de site (voir
-`agents/creation-site/skills/README.md`).
+Toutes les décisions de stack sont désormais actées. Détail de la génération de site
+(catalogue de templates par secteur, mode de publication) : voir
+`agents/creation-site/skills/README.md`.
 
 Tant que le scaffolding applicatif (pyproject.toml, package Python, migrations) n'existe
 pas, aucun agent IA ne doit générer de code d'implémentation définitif au-delà de la

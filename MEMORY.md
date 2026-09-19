@@ -205,3 +205,45 @@ Format d'entrée suggéré :
 - Scaffolding applicatif réel (pyproject.toml, package partagé FastAPI, migrations Alembic,
   Dockerfile pour Fly.io) non démarré — c'est la prochaine étape naturelle, toute la stack
   étant maintenant fixée.
+
+---
+
+## 2026-09-19 — Catalogue de templates par secteur (agent Création de site)
+
+**Décisions techniques**
+- Catalogue MVP fixé à **9 secteurs + 1 template générique de repli**, documenté dans
+  `agents/creation-site/skills/README.md` : Restaurant/restauration rapide, Boutique/
+  commerce de détail, Services beauté & bien-être, Artisanat & métiers techniques,
+  Services professionnels/conseil, Santé, Hôtellerie & tourisme, Éducation & formation,
+  Événementiel, et un template générique pour tout secteur non couvert.
+- 6 secteurs de base proposés par Claude ; 3 secteurs additionnels (Hôtellerie & tourisme,
+  Éducation & formation, Événementiel) ajoutés au MVP sur validation explicite de
+  l'utilisateur.
+- Structure commune définie pour tous les templates : header, hero, section(s) spécifiques
+  au secteur, section Contact, footer.
+- Contrainte spécifique actée pour le secteur Santé : aucun contenu médical généré sans
+  validation par un professionnel de santé du client.
+- Secteurs volontairement exclus du MVP (agriculture/agroalimentaire, ONG/associations,
+  etc.) : couverts par le template générique en attendant une demande réelle.
+- Mode de publication des sites tranché par ricochet de la décision d'hébergement : stockage
+  statique sur Cloudflare R2 + CDN (CLAUDE.md §3). Reste ouvert : générer 100% statique au
+  build, ou garder certaines sections semi-dynamiques servies par FastAPI (ex. formulaire de
+  réservation).
+- `CLAUDE.md` §3 mis à jour : toutes les décisions de stack sont désormais actées.
+
+**État d'avancement par agent**
+- Création de site : catalogue de templates et stack techniques actés, aucun code.
+- Autres agents : inchangé.
+
+**Problèmes rencontrés / solutions**
+- Aucun.
+
+**Questions ouvertes**
+- Génération 100% statique vs sections semi-dynamiques pour les sites clients (Création de
+  site).
+- Mécanisme de prévisualisation/validation du site par le client avant mise en ligne.
+- Sources publiques autorisées et critères de scoring (Prospection), format du
+  brief/validation avant publication (Réseaux sociaux), politique de rétention des
+  sauvegardes (Maintenance).
+- Scaffolding applicatif réel (pyproject.toml, package partagé FastAPI, migrations Alembic,
+  Dockerfile pour Fly.io) non démarré.

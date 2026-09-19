@@ -16,13 +16,35 @@ CLAUDE.md §5).
 | **Tailwind CSS** (ou un design system léger équivalent) | Cohérence visuelle et responsive design des sites générés, sans réinventer une bibliothèque de composants par template. | Permet de démarrer vite avec un rendu propre sur mobile — critère important vu l'audience (PME/indépendants consultés majoritairement depuis mobile en Afrique). |
 | **Pillow** | Traitement/redimensionnement des images fournies par le client (logo, photos) pour le rendu final du site. | Librairie Python standard, évite les dépendances lourdes pour un besoin simple d'optimisation d'images. |
 
+## Catalogue de templates par secteur (MVP)
+
+Structure commune à tous les templates : header (logo + navigation), section hero
+(accroche + appel à l'action), section(s) spécifiques au secteur (ci-dessous), section
+Contact (téléphone, WhatsApp, carte de localisation, réseaux sociaux), footer.
+
+| Secteur | Sections spécifiques |
+|---|---|
+| **Restaurant / restauration rapide** | Menu (catégories + prix), galerie photos, commande/réservation via WhatsApp |
+| **Boutique / commerce de détail** | Catalogue produits (grille + prix), bouton commande WhatsApp/paiement mobile |
+| **Services beauté & bien-être** (coiffure, esthétique, spa) | Prestations & tarifs, galerie de réalisations, prise de RDV |
+| **Artisanat & métiers techniques** (couture, menuiserie, plomberie, électricité...) | Services proposés, galerie de réalisations, zone d'intervention |
+| **Services professionnels / conseil** (consultants, comptables, avocats...) | Services, équipe, témoignages clients, prise de RDV |
+| **Santé** (cliniques, cabinets, pharmacies) | Spécialités, équipe, horaires/localisation — **contrainte** : aucun contenu médical généré sans validation par un professionnel de santé du client |
+| **Hôtellerie & tourisme** (guesthouses, agences de voyage) | Chambres/offres (avec tarifs), galerie photos, réservation |
+| **Éducation & formation** (écoles privées, centres de formation) | Programmes/cours proposés, corps enseignant/équipe, inscription |
+| **Événementiel** (traiteurs, organisateurs, location de salles) | Prestations/services, portfolio d'événements passés, devis/contact |
+| **Générique / vitrine simple** (repli) | Accueil, À propos, Services/Produits, Contact — pour tout secteur non encore couvert |
+
+Secteurs volontairement exclus du MVP (à ajouter plus tard selon la demande réelle des
+clients) : agriculture/agroalimentaire, ONG/associations, et tout autre secteur non listé —
+ils utilisent le template générique en attendant.
+
 ## Points à trancher avant implémentation
 
-- Mode de publication/hébergement des sites générés (statique sur stockage objet + CDN, ou
-  génération dynamique servie par l'app) — dépend du choix d'hébergement encore ouvert
-  (CLAUDE.md §3).
-- Catalogue initial de templates par secteur à définir avec l'équipe métier (liste des
-  secteurs prioritaires pour le marché cible).
+- Mode de publication/hébergement des sites générés : **tranché** — stockage statique sur
+  Cloudflare R2 + CDN (voir CLAUDE.md §3). Reste à définir : génération 100% statique au
+  build, ou pages semi-dynamiques servies par l'app FastAPI pour certaines sections
+  (ex. formulaire de réservation).
 - Mécanisme de prévisualisation/validation du site par le client avant mise en ligne.
 
 ## Rappel des permissions (voir CLAUDE.md §5)
