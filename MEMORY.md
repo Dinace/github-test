@@ -95,10 +95,44 @@ Format d'entrée suggéré :
 - Aucun.
 
 **Questions ouvertes**
-- Détail des 3 packs d'abonnement (quels agents/quotas par pack).
 - Framework frontend du dashboard client, hébergement/infrastructure de production.
 - Catalogue de templates par secteur (Création de site), sources publiques autorisées et
   critères de scoring (Prospection), format du brief/validation avant publication (Réseaux
   sociaux), politique de rétention des sauvegardes (Maintenance).
 - Scaffolding applicatif réel (pyproject.toml, package partagé, migrations) non démarré —
   prochaine étape une fois les points ci-dessus tranchés.
+
+---
+
+## 2026-09-19 — Détail des 3 packs d'abonnement
+
+**Décisions techniques**
+- `CLAUDE.md` §1 complété avec la table détaillée des 3 packs (agents inclus + quotas par
+  pack). Logique retenue : montée en gamme progressive, chaque pack ajoute des agents/
+  capacités plutôt que de simplement augmenter des quotas.
+- Réseaux sociaux : absent du pack Starter, inclus en Business (2 réseaux, 12 posts/mois) et
+  Premium (multi-réseaux + campagnes payantes, 30 posts/mois) — décision utilisateur.
+- Prospection commerciale : absente du pack Starter, incluse en Business (20 fiches
+  qualifiées/mois) et Premium (60 fiches qualifiées/mois, supports illimités) — décision
+  utilisateur, justifiée par le coût d'opération de l'agent et son rôle de différenciateur
+  pour les packs payants.
+- Création de site et Maintenance : inclus dans les 3 packs dès le Starter, avec des
+  capacités croissantes (pages, révisions, fréquence de monitoring/sauvegarde).
+- Quotas chiffrés proposés par Claude comme base de travail (non validés sur des coûts API
+  réels) : à ajuster une fois le pricing final et les coûts d'infrastructure connus.
+
+**État d'avancement par agent**
+- Inchangé (skills documentées pour les 4 agents, aucun code applicatif).
+
+**Problèmes rencontrés / solutions**
+- Une réponse utilisateur ambiguë sur le positionnement de la Prospection a nécessité une
+  question de clarification supplémentaire avant de trancher.
+
+**Questions ouvertes**
+- Validation des quotas chiffrés une fois les coûts API réels (Meta, WhatsApp Business,
+  scraping, etc.) et le pricing final connus.
+- Framework frontend du dashboard client, hébergement/infrastructure de production.
+- Catalogue de templates par secteur (Création de site), sources publiques autorisées et
+  critères de scoring (Prospection), format du brief/validation avant publication (Réseaux
+  sociaux), politique de rétention des sauvegardes (Maintenance).
+- Scaffolding applicatif réel (pyproject.toml, package partagé, migrations) non démarré.

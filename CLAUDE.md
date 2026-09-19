@@ -13,8 +13,28 @@ via un pilotage par agents IA, sur abonnement mensuel décliné en **3 packs** :
 - **Business**
 - **Premium**
 
-Le détail de ce qui est inclus dans chaque pack (quels agents, quels quotas, quelles
-fonctionnalités) reste à définir et sera documenté ici une fois figé.
+### Détail des packs
+
+Logique de montée en gamme progressive : chaque pack ajoute des agents et des capacités, pas
+seulement des quotas plus élevés. Les quotas chiffrés ci-dessous sont une **base de travail**,
+à ajuster une fois le coût réel des API tierces et le pricing final connus.
+
+| | **Starter** | **Business** | **Premium** |
+|---|---|---|---|
+| **Création de site** | 1 site vitrine, template sectoriel, jusqu'à 5 pages, 2 révisions/mois | 1 site, jusqu'à 10 pages, révisions illimitées, intégration Google Business Profile | Site complet, pages illimitées, révisions illimitées, intégrations avancées (Google Business Profile + Ads) |
+| **Réseaux sociaux** | Non inclus | Génération de contenu + calendrier, publication sur 2 réseaux (Meta + WhatsApp Business), jusqu'à 12 posts/mois | Publication multi-réseaux + campagnes payantes (Meta Ads, Google Ads), jusqu'à 30 posts/mois |
+| **Maintenance** | Monitoring de disponibilité (vérification toutes les 30 min), sauvegarde mensuelle, alertes basiques | Monitoring (toutes les 5 min), sauvegardes hebdomadaires, scan de sécurité basique mensuel | Monitoring temps réel, sauvegardes quotidiennes, scan de sécurité hebdomadaire, support prioritaire |
+| **Prospection commerciale** | Non inclus | 20 fiches prospect qualifiées/mois, scoring inclus, 1 support visuel d'offre/mois | 60 fiches prospect qualifiées/mois, scoring avancé, supports visuels d'offre illimités |
+
+Décisions actées avec l'utilisateur :
+- Réseaux sociaux : absent du Starter (argument de montée en gamme vers Business).
+- Prospection commerciale : absente du Starter, incluse en Business et Premium — c'est
+  l'agent le plus coûteux à opérer (recherche externe, scoring, conformité légale) et le
+  plus central pour aider les clients à trouver des clients, d'où son rôle de
+  différenciateur pour les packs payants supérieurs plutôt qu'un accès dilué dès l'entrée
+  de gamme.
+- Les quotas ci-dessus restent à valider une fois les coûts API réels connus (voir
+  `MEMORY.md`).
 
 ## 2. Les 4 agents de la plateforme
 
