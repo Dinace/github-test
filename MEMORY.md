@@ -1148,3 +1148,54 @@ Prospection : `python-pptx` était déjà retenu dans le tableau des skills
 - Toutes les questions ouvertes des entrées précédentes restent valables (Playwright, Meta
   Graph API pour la recherche de prospects, flux OAuth WhatsApp/Meta, vraie authentification
   staff, monitor UptimeRobot auto-créé, scan d'en-têtes HTTP des sites clients).
+
+## 2026-09-20 — Prospection : recherche de prospects via Meta Pages (deuxième source)
+
+**Contexte** : suite de "réalise le non fait", demande explicite de continuer sur
+Prospection ou Maintenance. Les points Maintenance restants toujours bloqués sur l'absence
+d'URL publique de site (non retentée). Repris le dernier point Prospection raisonnablement
+autonome : "Meta Graph API pour la recherche de prospects (Pages professionnelles)" — seul
+Google Places était implémenté.
+
+**Découverte en creusant** : `META_ADS_TOKEN`/`META_APP_ID`/`META_APP_SECRET` étaient
+documentés dans `.env.example`/README depuis le début du projet mais jamais câblés dans
+`Settings` ni utilisés nulle part en code (même constat que `WHATSAPP_BUSINESS_TOKEN`,
+découvert lors du lot chiffrement/webhook Sentry) — l'agent Réseaux sociaux publie via
+`Client.meta_page_access_token` (par client, en base), pas ces identifiants d'app. `META_
+ADS_TOKEN` en particulier est conceptuellement le mauvais credential pour une recherche de
+Pages (portée "Marketing API/campagnes", pas "Page Public Content Access") : décidé
+d'utiliser `META_APP_ID`/`META_APP_SECRET` à la place, combinés en jeton d'accès applicatif
+(`{id}|{secret}`, format standard Meta) — enfin câblés dans `platform_core/config.py`,
+au niveau **plateforme** (jamais un compte client), pour ce seul usage de recherche.
+
+**Implémentation**
+- `agents/prospection/sources/meta_pages.py::search_pages(query)` — même type
+  `RawPlaceResult` que Google Places (rebranchement direct sur le pipeline de scoring
+  existant sans le dupliquer). Lit le champ `website` (site externe du commerce), jamais
+  `link` (l'URL de la Page Facebook elle-même) — les confondre aurait fait visiter
+  facebook.com par `website_audit.py` (lot précédent) au lieu du site du prospect. Retourne
+  une liste vide sans erreur si les credentials ne sont pas configurés : source secondaire,
+  jamais bloquante pour Google Places. Note d'honnêteté (même esprit que google_places.py) :
+  l'endpoint "Page Public Content Access" est une permission Meta à accès restreint, jamais
+  vérifié contre un appel réel dans cette session.
+- `agents/prospection/agent.py::_merge_sources` — combine les deux sources, dédupliquées
+  par numéro de téléphone (signal d'identité le plus fiable entre deux API différentes ;
+  un rapprochement par nom aurait été plus fragile, pas fait sans besoin démontré). Google
+  Places reste prioritaire à égalité de résultat. `Prospect.source` reflète désormais
+  l'origine réelle (`google_places` ou `meta_pages`) au lieu d'être toujours
+  `"google_places"`.
+- `search_and_score` : nouveau paramètre `meta_http_client`, injectable séparément de
+  `http_client` (Google Places) et `website_http_client` — trois intégrations distinctes.
+- Testé : parsing Meta Pages (y compris la distinction `website`/`link`), jeton d'accès
+  applicatif envoyé correctement, dégradation silencieuse sans credentials ; côté agent :
+  résultats Meta ajoutés à ceux de Google, et déduplication par téléphone (un même
+  établissement trouvé par les deux sources ne crée qu'une seule fiche).
+- 141 tests au total (contre 136 avant ce lot), tous passent. Packaging non-éditable
+  revérifié.
+
+**Questions ouvertes restantes**
+- Rapprochement de sources au-delà du téléphone (ex. par nom) — pas fait, fragile sans
+  besoin démontré.
+- Toutes les autres questions ouvertes des entrées précédentes restent valables (Playwright,
+  flux OAuth WhatsApp/Meta, vraie authentification staff, monitor UptimeRobot auto-créé,
+  scan d'en-têtes HTTP des sites clients).

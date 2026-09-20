@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from agents.prospection.agent import search_and_score
 from platform_core.auth import create_client_with_api_key
+from platform_core.config import settings
 from platform_core.db import Base
 from platform_core.models import ProspectCategory
 
@@ -45,6 +46,17 @@ class _FakeWebsiteHttpClient:
 
     def get(self, url: str, **kwargs) -> _FakeWebsiteResponse:
         return _FakeWebsiteResponse(200, self._html_by_url.get(url, ""))
+
+
+class _FakeMetaHttpClient:
+    """Simule l'API Meta Pages (GET/JSON) — distincte de `_FakeHttpClient` (Google Places,
+    POST) et `_FakeWebsiteHttpClient` (visite de site, GET mais réponses HTML)."""
+
+    def __init__(self, payload: dict) -> None:
+        self._payload = payload
+
+    def get(self, url: str, *, params: dict) -> _FakeResponse:
+        return _FakeResponse(self._payload)
 
 
 @pytest.fixture()
@@ -137,3 +149,54 @@ def test_search_and_score_visits_prospect_website_to_assess_status(
     # le prospect avec le site à jour doit scorer strictement moins bien que celui à l'ancien
     # site, preuve que la visite réelle du site a bien influencé le résultat.
     assert modern.score < outdated.score
+
+
+def test_search_and_score_adds_meta_pages_results_not_found_on_google(
+    db_session: Session, client_id: uuid.UUID, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "meta_app_id", "test-app-id")
+    monkeypatch.setattr(settings, "meta_app_secret", "test-app-secret")
+
+    google_payload = {"places": [{"displayName": {"text": "Restaurant Google"}, "nationalPhoneNumber": "+24101010101"}]}
+    meta_payload = {"data": [{"name": "Boutique Meta Seule", "phone": "+24102020202"}]}
+
+    prospects = search_and_score(
+        client_id,
+        "restaurant Libreville",
+        "restaurant",
+        db=db_session,
+        http_client=_FakeHttpClient(google_payload),
+        meta_http_client=_FakeMetaHttpClient(meta_payload),
+    )
+
+    assert len(prospects) == 2
+    google_prospect = next(p for p in prospects if p.business_name == "Restaurant Google")
+    meta_prospect = next(p for p in prospects if p.business_name == "Boutique Meta Seule")
+    assert google_prospect.source == "google_places"
+    assert meta_prospect.source == "meta_pages"
+
+
+def test_search_and_score_deduplicates_meta_pages_by_phone(
+    db_session: Session, client_id: uuid.UUID, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Le même établissement trouvé par les deux sources (même numéro de téléphone) ne doit
+    créer qu'UNE seule fiche prospect, pas un doublon."""
+    monkeypatch.setattr(settings, "meta_app_id", "test-app-id")
+    monkeypatch.setattr(settings, "meta_app_secret", "test-app-secret")
+
+    google_payload = {
+        "places": [{"displayName": {"text": "Restaurant Chez Awa"}, "nationalPhoneNumber": "+24101010101"}]
+    }
+    meta_payload = {"data": [{"name": "Restaurant Chez Awa (Facebook)", "phone": "+24101010101"}]}
+
+    prospects = search_and_score(
+        client_id,
+        "restaurant Libreville",
+        "restaurant",
+        db=db_session,
+        http_client=_FakeHttpClient(google_payload),
+        meta_http_client=_FakeMetaHttpClient(meta_payload),
+    )
+
+    assert len(prospects) == 1
+    assert prospects[0].source == "google_places"

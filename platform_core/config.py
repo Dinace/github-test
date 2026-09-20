@@ -34,6 +34,17 @@ class Settings(BaseSettings):
     # la recherche d'AUTRES établissements pour la prospection).
     google_places_api_key: str = ""
 
+    # Prospection — recherche de Pages professionnelles Meta (agents/prospection/sources/
+    # meta_pages.py), deuxième source en plus de Google Places. Contrairement à
+    # Client.meta_page_id/meta_page_access_token (le compte Meta DU CLIENT, utilisé par
+    # l'agent Réseaux sociaux pour publier en son nom), ce sont des identifiants d'app Meta
+    # au niveau PLATEFORME servant uniquement à interroger l'API Graph publique — jamais à
+    # publier ni à agir au nom d'un client. Combinés en un jeton d'accès applicatif
+    # (`{id}|{secret}`, format standard Meta). Vides par défaut : la recherche se limite
+    # alors à Google Places, sans erreur (dégradation silencieuse).
+    meta_app_id: str = ""
+    meta_app_secret: str = ""
+
     # Chiffrement au repos des tokens sensibles stockés en base (Client.meta_page_access_token,
     # Client.whatsapp_access_token — voir platform_core/encryption.py). Clé Fernet
     # (`Fernet.generate_key()`), 44 caractères base64. Vide par défaut : dégradation

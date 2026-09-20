@@ -7,18 +7,39 @@ from sqlalchemy.orm import Session
 
 from agents.prospection.scoring import ProspectSignals, WebsiteStatus, score_prospect
 from agents.prospection.sources.google_places import RawPlaceResult, search_places
+from agents.prospection.sources.meta_pages import search_pages
 from agents.prospection.website_audit import assess_website
 from platform_core.activity import log_event
 from platform_core.models import Prospect
 
 
+def _merge_sources(
+    places: list[RawPlaceResult], pages: list[RawPlaceResult]
+) -> list[tuple[RawPlaceResult, str]]:
+    """Combine les deux sources, dédupliquées par numéro de téléphone (signal d'identité le
+    plus fiable entre deux API différentes — un rapprochement par nom serait plus fragile,
+    pas fait ici faute de besoin démontré). Google Places reste prioritaire à égalité de
+    résultat : ordre d'appel dans `search_and_score`, jamais l'inverse."""
+    seen_phones = {place.phone_number for place in places if place.phone_number}
+    merged = [(place, "google_places") for place in places]
+    for page in pages:
+        if page.phone_number and page.phone_number in seen_phones:
+            continue
+        merged.append((page, "meta_pages"))
+        if page.phone_number:
+            seen_phones.add(page.phone_number)
+    return merged
+
+
 def _signals_from_place(place: RawPlaceResult, *, website_http_client: httpx.Client | None = None) -> ProspectSignals:
-    """Dérive des signaux de scoring à partir d'un résultat Google Places.
+    """Dérive des signaux de scoring à partir d'un résultat de recherche (Google Places ou
+    Meta Pages — même type `RawPlaceResult`, la source d'origine ne change pas la façon de
+    calculer les signaux).
 
     `website_status` visite réellement le site (agents/prospection/website_audit.py) quand
-    un `website_uri` existe — comble l'ancienne simplification "présence = moderne" (Google
-    Places ne dit pas si un site est à jour). Absence de `website_uri` : `none` directement,
-    pas de visite à faire.
+    un `website_uri` existe — comble l'ancienne simplification "présence = moderne" (ni
+    Google Places ni Meta ne disent si un site est à jour). Absence de `website_uri` :
+    `none` directement, pas de visite à faire.
     """
     if place.website_uri:
         website_status = assess_website(place.website_uri, http_client=website_http_client)
@@ -44,28 +65,35 @@ def search_and_score(
     db: Session,
     http_client: httpx.Client | None = None,
     website_http_client: httpx.Client | None = None,
+    meta_http_client: httpx.Client | None = None,
 ) -> list[Prospect]:
-    """Recherche des prospects via Google Places, les score, et crée les fiches en base.
+    """Recherche des prospects via Google Places et Meta Pages, les score, et crée les
+    fiches en base.
 
-    `http_client` (recherche Google Places) et `website_http_client` (visite des sites des
-    prospects trouvés) sont injectables séparément : deux intégrations techniques
-    distinctes, avec des besoins de test différents (l'une simule des réponses JSON Places,
-    l'autre du HTML) — les confondre rendrait les deux plus difficiles à tester isolément.
+    `http_client` (Google Places), `meta_http_client` (Meta Pages) et `website_http_client`
+    (visite des sites trouvés) sont injectables séparément : trois intégrations techniques
+    distinctes, avec des besoins de test différents — les confondre rendrait chacune plus
+    difficile à tester isolément. Meta Pages est une source secondaire silencieuse : sans
+    `meta_app_id`/`meta_app_secret` configurés, `search_pages` retourne une liste vide sans
+    erreur (voir agents/prospection/sources/meta_pages.py), la recherche continue sur
+    Google Places seul.
     """
     places = search_places(query, http_client=http_client)
+    pages = search_pages(query, http_client=meta_http_client)
+    results = _merge_sources(places, pages)
 
     prospects = []
-    for place in places:
-        signals = _signals_from_place(place, website_http_client=website_http_client)
+    for result, source in results:
+        signals = _signals_from_place(result, website_http_client=website_http_client)
         category, score = score_prospect(signals)
 
         prospect = Prospect(
             client_id=client_id,
-            business_name=place.name,
+            business_name=result.name,
             sector=sector,
-            phone=place.phone_number,
-            source="google_places",
-            raw_data=place.model_dump(mode="json"),
+            phone=result.phone_number,
+            source=source,
+            raw_data=result.model_dump(mode="json"),
             category=category,
             score=score,
         )

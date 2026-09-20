@@ -33,11 +33,11 @@ pays, pas figé pour toute la plateforme.
 | `MTN_MOMO_API_KEY` | MTN Mobile Money | Plateforme (facturation) | Idem Orange Money. **Réservé** : MTN n'opère pas au Gabon, à activer lors de l'extension vers un pays où MTN est présent. |
 | `WAVE_API_KEY` | Wave | Plateforme (facturation) | Idem Orange Money. **Réservé** : présence non confirmée au Gabon, à activer lors de l'extension (Wave est surtout présent en Afrique de l'Ouest). |
 | `META_ADS_TOKEN` | Meta Ads (Facebook/Instagram) | Agent Réseaux sociaux | Publication de contenu et gestion de campagnes, sur validation préalable uniquement. |
-| `META_APP_ID` / `META_APP_SECRET` | Meta for Developers | Agent Réseaux sociaux | Authentification applicative aux API Meta. |
+| `META_APP_ID` / `META_APP_SECRET` | Meta for Developers | Agent Prospection (recherche de Pages, `agents/prospection/sources/meta_pages.py`) ; réservé pour un futur flux OAuth côté Agent Réseaux sociaux | Identifiants d'app Meta au niveau **plateforme**, combinés en jeton d'accès applicatif (`{id}\|{secret}`) pour interroger l'API Graph publique — jamais pour publier ni agir au nom d'un client (ça reste `Client.meta_page_access_token`, par client, en base). Vides par défaut : la recherche de prospects se limite alors à Google Places, sans erreur. |
 | `WHATSAPP_BUSINESS_TOKEN` | WhatsApp Business API | Agent Réseaux sociaux, Agent Prospection (notifications) | Envoi de messages/notifications côté client, jamais de démarchage de prospects filtrés "non favorable"/"non joignable". |
 | `GOOGLE_ADS_TOKEN` | Google Ads | Agent Réseaux sociaux | Campagnes publicitaires, sur validation préalable uniquement. |
 | `GOOGLE_BUSINESS_PROFILE_TOKEN` | Google Business Profile | Agent Réseaux sociaux, Agent Création de site | Fiche établissement du client, référencement local. |
-| `GOOGLE_PLACES_API_KEY` | Google Places API | Agent Prospection | Recherche d'établissements publics pour la prospection — distincte de `GOOGLE_BUSINESS_PROFILE_TOKEN` (fiche du client lui-même). |
+| `GOOGLE_PLACES_API_KEY` | Google Places API | Agent Prospection | Recherche d'établissements publics pour la prospection — distincte de `GOOGLE_BUSINESS_PROFILE_TOKEN` (fiche du client lui-même). Source principale ; Meta Pages (ci-dessus) est une source secondaire silencieuse en plus. |
 | `DATABASE_URL` | PostgreSQL managé (Fly Postgres) | Plateforme (tous les agents, via la couche d'accès aux données) | Connexion à la base de données. |
 | `SENTRY_DSN` | Sentry (ou équivalent) | Agent Maintenance | Détection et remontée d'anomalies/bugs. |
 | `UPTIME_MONITOR_TOKEN` | Service de monitoring (ex. UptimeRobot) | Agent Maintenance | Surveillance de disponibilité des sites clients. |

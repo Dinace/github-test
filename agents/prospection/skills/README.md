@@ -37,8 +37,9 @@ par construction plutôt que par interprétation.
 **Sources autorisées :**
 - **Google Places API / Google Business Profile** : fiches d'établissement publiques
   (nom, secteur, adresse, téléphone, avis) — source officielle de référence.
-- **Meta Graph API** (`META_ADS_TOKEN`/`META_APP_ID`, déjà présents dans les credentials) :
-  informations publiques des Pages professionnelles Facebook/Instagram.
+- **Meta Graph API** (`META_APP_ID`/`META_APP_SECRET`, implémenté dans
+  `sources/meta_pages.py`) : informations publiques des Pages professionnelles
+  Facebook/Instagram.
 - **Annuaires professionnels et registres publics** (ex. chambres de commerce, registre du
   commerce quand l'information est explicitement publique) : collecte HTML classique
   (BeautifulSoup) autorisée, dans le respect du `robots.txt`.
@@ -87,6 +88,16 @@ ou "non joignable" (CLAUDE.md §5).
 - `sources/google_places.py` : `search_places(query)` — recherche via Google Places API
   (New), client HTTP injectable. Note d'honnêteté dans le fichier : schéma de réponse suivi
   au mieux, pas vérifié contre un appel réel faute de clé API disponible dans cette session.
+- `sources/meta_pages.py` : `search_pages(query)` — deuxième source, Pages professionnelles
+  Meta via l'API Graph (`GET /pages/search`), même type `RawPlaceResult` que Google Places
+  pour rebrancher directement sur le même pipeline de scoring. Utilise `website` (le site
+  externe du commerce), jamais `link` (l'URL de la Page Facebook elle-même — les confondre
+  ferait visiter facebook.com dans `website_audit.py`). Silencieux sans `meta_app_id`/
+  `meta_app_secret` configurés (liste vide, pas d'erreur) : source secondaire, jamais
+  bloquante. **Note d'honnêteté** : l'endpoint "Page Public Content Access" est une
+  permission Meta à accès restreint (revue d'app requise) — schéma suivi au mieux, jamais
+  vérifié contre un appel réel dans cette session (pas d'app Meta disponible), à confirmer
+  avant un usage en production.
 - `directory_scraper.py` : `fetch_directory_page(url)` — collecte HTML basique
   (BeautifulSoup) pour les annuaires publics, garde-fou de conformité systématique.
 - `scoring.py` : `score_prospect(signals, weights)` — implémentation réelle du tableau de
@@ -114,13 +125,17 @@ ou "non joignable" (CLAUDE.md §5).
   signal robuste vu son ancienneté comme standard) → `outdated` ; sinon `modern`. **Note
   d'honnêteté** (même esprit que `security_scan.py`) : c'est une heuristique technique, pas
   un audit de conception/SEO — peut mal classer un cas inhabituel dans les deux sens.
-- `agent.py` : `search_and_score` — enchaîne recherche Google Places → dérivation des
+- `agent.py` : `search_and_score` — enchaîne recherche Google Places + Meta Pages
+  (`_merge_sources`, dédupliquées par numéro de téléphone — signal d'identité le plus
+  fiable entre deux API différentes, Google Places prioritaire à égalité) → dérivation des
   signaux (dont la visite réelle du site via `website_audit.py` quand un `website_uri`
   existe, comble l'ancienne simplification "présence = moderne") → scoring → création des
-  fiches en base. `http_client` (recherche Places) et `website_http_client` (visite des
-  sites) sont injectables séparément, deux intégrations distinctes avec des besoins de test
-  différents. Simplification restante : le secteur est considéré comme correspondant au
-  catalogue par construction (la recherche cible déjà un secteur donné).
+  fiches en base, avec `Prospect.source` reflétant l'origine réelle (`google_places` ou
+  `meta_pages`) de chaque fiche. `http_client` (Google Places), `meta_http_client` (Meta
+  Pages) et `website_http_client` (visite des sites) sont injectables séparément, trois
+  intégrations distinctes avec des besoins de test différents. Simplification restante : le
+  secteur est considéré comme correspondant au catalogue par construction (la recherche
+  cible déjà un secteur donné).
 - Endpoints (`app/routers/prospection.py`), authentifiés par clé API client (comme
   `sites.py`/`posts.py`) : `POST /api/prospects/search`, `GET /api/prospects`, `POST
   /api/prospects/{id}/propose-contact` (**bloqué en code**, 403, si la catégorie est
@@ -129,28 +144,30 @@ ou "non joignable" (CLAUDE.md §5).
   connexion WhatsApp, 412 sinon), `GET /api/prospects/{id}/offer` (PDF ou PowerPoint selon
   `?format=`).
 - Testé : conformité (LinkedIn bloqué, y compris en sous-domaine), scoring (les 4
-  catégories, seuils configurables), recherche Google Places, détection heuristique du
-  statut d'un site (moderne/obsolète/absent, y compris échec réseau et HTTP >= 400),
-  structuration/génération de contenu (client Claude simulé), envoi WhatsApp (client HTTP
-  simulé), génération de PDF et de PowerPoint (contenu relu après génération, pas seulement
-  la signature du fichier), et le flux complet de contact via l'API (y compris le blocage
-  403 sur les catégories interdites et le format d'offre invalide) — aucun appel réseau réel
-  dans la suite de tests.
+  catégories, seuils configurables), recherche Google Places et Meta Pages (y compris
+  dégradation silencieuse sans credentials, et déduplication par téléphone entre les deux
+  sources), détection heuristique du statut d'un site (moderne/obsolète/absent, y compris
+  échec réseau et HTTP >= 400), structuration/génération de contenu (client Claude simulé),
+  envoi WhatsApp (client HTTP simulé), génération de PDF et de PowerPoint (contenu relu
+  après génération, pas seulement la signature du fichier), et le flux complet de contact
+  via l'API (y compris le blocage 403 sur les catégories interdites et le format d'offre
+  invalide) — aucun appel réseau réel dans la suite de tests.
 
 ## Points ouverts (pas encore fait, explicitement)
 
-- **Playwright non implémenté** : seules les sources HTML statiques (BeautifulSoup) et
-  Google Places sont couvertes ; les sources nécessitant du JavaScript restent à faire si
-  le besoin se confirme (skills retenue mais pas codée).
-- **Meta Graph API pour la recherche de prospects** (Pages professionnelles) — seul Google
-  Places est implémenté pour l'instant ; la clé `META_ADS_TOKEN` existe déjà côté Réseaux
-  sociaux mais son usage côté Prospection reste à construire.
+- **Playwright non implémenté** : seules les sources HTML statiques (BeautifulSoup),
+  Google Places et Meta Pages sont couvertes ; les sources nécessitant du JavaScript
+  restent à faire si le besoin se confirme (skills retenue mais pas codée).
 - **Flux de connexion WhatsApp Business** (comme pour Meta) — credentials renseignés
   manuellement en attendant.
-- Vérification de connectivité réelle : Google Places et WhatsApp Cloud API n'ont jamais été
-  appelés contre de vrais services dans cette session (pas de clés disponibles) — seule la
-  logique est testée avec des doublures. Idem pour `website_audit.py` : l'heuristique n'a
-  jamais visité de vrai site dans cette session.
+- Rapprochement de sources au-delà du numéro de téléphone : deux fiches du même
+  établissement sans téléphone commun (ex. trouvé sous des noms légèrement différents sur
+  Google Places et Meta) ne sont pas dédupliquées — un rapprochement par nom serait plus
+  fragile, pas fait sans besoin démontré.
+- Vérification de connectivité réelle : Google Places, Meta Pages et WhatsApp Cloud API
+  n'ont jamais été appelés contre de vrais services dans cette session (pas de clés/app
+  disponibles) — seule la logique est testée avec des doublures. Idem pour
+  `website_audit.py` : l'heuristique n'a jamais visité de vrai site dans cette session.
 
 ## Rappel des permissions (voir CLAUDE.md §5)
 
