@@ -4,12 +4,14 @@ import json
 import uuid
 from datetime import UTC, datetime
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from agents.maintenance import backup as backup_module
 from agents.maintenance import restore as restore_module
+from agents.maintenance import security_headers as security_headers_module
 from app.auth import require_ops_token
 from platform_core.config import settings
 from platform_core.db import get_db
@@ -38,6 +40,10 @@ class RestoreProposalRequest(BaseModel):
 
 class ConfirmRestoreRequest(BaseModel):
     confirmed_by: str
+
+
+class HeaderScanRequest(BaseModel):
+    url: str
 
 
 @router.get("/notifications")
@@ -107,6 +113,28 @@ def list_backups(db: Session = Depends(get_db)) -> list[dict]:
         {"id": str(b.id), "r2_key": b.r2_key, "size_bytes": b.size_bytes, "created_at": b.created_at.isoformat()}
         for b in backups
     ]
+
+
+@router.post("/security-scan/headers")
+def scan_site_headers(payload: HeaderScanRequest) -> dict:
+    """Audit des en-têtes de sécurité HTTP d'une URL donnée (agents/maintenance/
+    security_headers.py). Déclenchement manuel, sur une URL explicite — pas encore de
+    tâche planifiée par site (voir agents/maintenance/skills/README.md, "points ouverts") :
+    `Site` n'a pas de champ URL publique, cette route reste utilisable dès maintenant pour
+    auditer n'importe quel site (y compris externe) en attendant.
+    """
+    try:
+        findings = security_headers_module.check_security_headers(payload.url)
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"Échec de la requête vers {payload.url} : {exc}") from exc
+
+    urgent, deferred = security_headers_module.classify_urgency(findings)
+    return {
+        "url": payload.url,
+        "findings": [f.model_dump() for f in findings],
+        "urgent_count": len(urgent),
+        "deferred_count": len(deferred),
+    }
 
 
 @router.post("/backups/{backup_id}/restore-requests", status_code=201)

@@ -1353,3 +1353,46 @@ Pages.
 - Toutes les autres questions ouvertes des entrées précédentes restent valables (Playwright,
   flux OAuth WhatsApp/Meta, vraie authentification staff, monitor UptimeRobot auto-créé,
   scan d'en-têtes HTTP des sites clients).
+
+## 2026-09-20 — Maintenance : moteur d'audit des en-têtes de sécurité HTTP
+
+**Contexte** : suite de "réalise le non fait", demande de continuer sur Prospection ou
+Maintenance. Les points Maintenance restants (authentification staff, monitor UptimeRobot
+auto-créé, scan d'en-têtes HTTP) étaient tous bloqués soit par l'absence de credentials
+réels, soit par l'absence d'un schéma d'URL publique pour `Site` (décision de modélisation
+plus large, non tranchée depuis plusieurs sessions). Plutôt que de forcer cette décision ou
+laisser le point entièrement de côté, découplage : construire la **logique d'audit**
+elle-même (indépendante de la question de l'URL), qui était la seule partie réellement
+bloquée par rien du tout.
+
+**Implémentation**
+- `agents/maintenance/security_headers.py::check_security_headers(url)` — audit de 5
+  en-têtes de sécurité HTTP standards (Strict-Transport-Security, X-Content-Type-Options,
+  X-Frame-Options, Content-Security-Policy, Referrer-Policy), même structure que
+  `security_scan.py` (pip-audit) : une fonction qui prend une URL en **paramètre
+  explicite**, ne la déduit jamais d'un `Site` — utilisable dès aujourd'hui sur n'importe
+  quelle URL, y compris un site externe, en attendant que le schéma d'URL publique des
+  sites générés soit tranché.
+- `classify_urgency` — même répartition immédiat/résumé hebdomadaire que
+  `security_scan.py::classify_urgency` (seuil "haute" = HSTS manquant).
+- Endpoint staff `POST /api/maintenance/security-scan/headers` (URL en paramètre du corps),
+  déclenchement manuel — pas de tâche planifiée par site (bloqué sur la même absence de
+  schéma d'URL), mais un outil réellement utilisable dès maintenant par le staff.
+- Essayé une fois contre un vrai domaine externe (`example.com`) hors suite de tests :
+  confirme que le sandbox de cette session bloque tout accès réseau sortant (politique
+  d'organisation), pas un problème de credentials cette fois (une requête GET simple n'en
+  demande aucun) — mais ça valide que `httpx.ProxyError` (la vraie exception levée) est
+  bien un `httpx.HTTPError`, donc correctement capturée et transformée en 502 par
+  l'endpoint : une vérification en conditions réelles plus poussée que pour les autres
+  intégrations externes de cette session, purement par la nature de cette fonctionnalité
+  (aucune clé requise).
+- Testé : en-têtes présents/manquants, répartition immédiat/résumé hebdo, propagation d'une
+  erreur réseau, et l'endpoint (findings, 401 sans jeton, 502 sur erreur réseau).
+- 182 tests au total (contre 174 avant ce lot), tous passent. Packaging non-éditable
+  revérifié.
+
+**Questions ouvertes restantes**
+- Toujours pas de tâche planifiée par site généré (bloqué sur le schéma d'URL publique,
+  même blocage que le monitor UptimeRobot auto-créé) — l'outil est prêt à être branché dès
+  que cette décision est prise.
+- Toutes les autres questions ouvertes des entrées précédentes restent valables.

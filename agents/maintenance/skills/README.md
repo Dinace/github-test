@@ -70,6 +70,16 @@ communiquer clairement au client dans les conditions d'utilisation du pack.
 - `security_scan.py` : `run_pip_audit` (sous-processus injectable, parsing best-effort —
   schéma JSON de `pip-audit` non revérifié contre la doc à jour dans cette session, voir
   note dans le fichier) et `classify_urgency` (répartition immédiat/résumé hebdo).
+- `security_headers.py` : `check_security_headers(url)` — audit des en-têtes de sécurité
+  HTTP (`Strict-Transport-Security`, `X-Content-Type-Options`, `X-Frame-Options`,
+  `Content-Security-Policy`, `Referrer-Policy`) d'une URL **explicite**, et
+  `classify_urgency` (même répartition immédiat/résumé hebdo que `security_scan.py`, seuil
+  "haute" = `Strict-Transport-Security` manquant). Comble la **moitié** du point ouvert
+  "scan de sécurité des sites clients générés eux-mêmes" — la logique d'audit, testable et
+  utilisable dès maintenant, indépendamment de la question non tranchée de l'URL publique
+  d'un site généré (`Site` n'a pas de champ URL, voir points ouverts). Exposé en
+  déclenchement manuel (`POST /api/maintenance/security-scan/headers`, staff, prend l'URL
+  en paramètre) — utilisable dès aujourd'hui sur n'importe quel site, y compris externe.
 - `restore.py` : `propose_restore` / `confirm_restore` / `execute_restore` — implémente
   strictement le processus à 4 étapes ci-dessus ; `execute_restore` lève
   `RestoreNotConfirmedError` si appelé sur une demande qui n'est pas au statut `confirmed`,
@@ -87,9 +97,16 @@ communiquer clairement au client dans les conditions d'utilisation du pack.
   proposer/confirmer/exécuter une restauration. Le webhook Sentry n'est volontairement pas
   derrière ce jeton (Sentry appelle directement, sans le connaître).
 - Testé : rotation de rétention (les 3 packs, avec des dizaines de sauvegardes synthétiques
-  étalées sur plusieurs mois), seuil de disponibilité, parsing pip-audit, le refus
-  d'exécuter une restauration non confirmée (le garde-fou central), et le flux complet via
-  l'API — aucun appel réseau réel (Postgres, R2, UptimeRobot, Sentry tous simulés).
+  étalées sur plusieurs mois), seuil de disponibilité, parsing pip-audit, audit des
+  en-têtes de sécurité (présents/manquants, répartition immédiat/résumé hebdo, erreur
+  réseau propagée), le refus d'exécuter une restauration non confirmée (le garde-fou
+  central), et le flux complet via l'API — aucun appel réseau réel dans la suite de tests
+  (Postgres, R2, UptimeRobot, Sentry tous simulés). `check_security_headers` a en plus été
+  essayé une fois contre un vrai domaine externe (`example.com`) hors suite de tests : le
+  sandbox bloque tout accès réseau sortant (politique d'organisation, pas un problème de
+  credentials), mais ça a confirmé que la gestion d'erreur réseau fonctionne correctement
+  en conditions réelles (`httpx.ProxyError` est bien un `httpx.HTTPError`, capturé et
+  transformé en 502 par l'endpoint).
 - `scheduled_jobs.py` : 3 tâches planifiées (APScheduler, voir `platform_core/scheduler.py`)
   remplaçant les déclenchements manuels ci-dessus.
   - `run_backups_and_retention` / `run_security_scans` : la sauvegarde (un seul `pg_dump` de
@@ -118,8 +135,12 @@ communiquer clairement au client dans les conditions d'utilisation du pack.
 - Création automatique d'un monitor UptimeRobot à la publication d'un site — aujourd'hui
   `Site.uptime_monitor_id` doit être renseigné manuellement, sinon la tâche planifiée
   ignore ce site.
-- Scan de sécurité des sites clients générés eux-mêmes (en-têtes HTTP) — seul le scan des
-  dépendances Python de la plateforme (`pip-audit`) est implémenté pour l'instant.
+- Scan des en-têtes de sécurité **par site généré automatiquement** — `security_headers.py`
+  fait le travail (voir "Implémentation actuelle"), mais reste un déclenchement manuel sur
+  URL explicite : le brancher en tâche planifiée par site (comme `run_security_scans`)
+  nécessite un schéma d'URL publique pour `Site`, qui n'existe pas encore (décision de
+  modélisation plus large, non tranchée — voir MEMORY.md). Bloque aussi la création
+  automatique de monitor UptimeRobot ci-dessus, même cause.
 
 ## Rappel des permissions (voir CLAUDE.md §5)
 

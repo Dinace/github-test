@@ -9,6 +9,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from agents.maintenance import backup as backup_module
+from agents.maintenance import security_headers as security_headers_module
+from agents.maintenance.security_headers import SecurityHeaderFinding
 from app.main import app
 from platform_core.config import settings
 from platform_core.db import Base, get_db
@@ -214,3 +216,59 @@ def test_sentry_webhook_rejects_missing_signature_when_secret_configured(
     )
 
     assert resp.status_code == 401
+
+
+def test_scan_site_headers_returns_findings(
+    db_session: Session, ops_headers: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        security_headers_module,
+        "check_security_headers",
+        lambda url, **kw: [
+            SecurityHeaderFinding(
+                header="Strict-Transport-Security",
+                present=False,
+                severity="high",
+                recommendation="Force HTTPS pour tous les visiteurs.",
+            )
+        ],
+    )
+    client = TestClient(app)
+
+    resp = client.post(
+        "/api/maintenance/security-scan/headers", headers=ops_headers, json={"url": "https://chez-awa.example"}
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["url"] == "https://chez-awa.example"
+    assert body["urgent_count"] == 1
+    assert body["deferred_count"] == 0
+    assert body["findings"][0]["header"] == "Strict-Transport-Security"
+
+
+def test_scan_site_headers_requires_ops_token(db_session: Session, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "ops_api_token", "test-ops-token")
+    client = TestClient(app)
+
+    resp = client.post("/api/maintenance/security-scan/headers", json={"url": "https://chez-awa.example"})
+
+    assert resp.status_code == 401
+
+
+def test_scan_site_headers_returns_502_on_network_error(
+    db_session: Session, ops_headers: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import httpx
+
+    def _fail(url, **kw):
+        raise httpx.ConnectTimeout("timeout")
+
+    monkeypatch.setattr(security_headers_module, "check_security_headers", _fail)
+    client = TestClient(app)
+
+    resp = client.post(
+        "/api/maintenance/security-scan/headers", headers=ops_headers, json={"url": "https://chez-awa.example"}
+    )
+
+    assert resp.status_code == 502
