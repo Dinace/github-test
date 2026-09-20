@@ -200,3 +200,52 @@ def test_search_and_score_deduplicates_meta_pages_by_phone(
 
     assert len(prospects) == 1
     assert prospects[0].source == "google_places"
+
+
+def test_search_and_score_deduplicates_meta_pages_by_normalized_name_without_common_phone(
+    db_session: Session, client_id: uuid.UUID, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Même établissement, mais un seul numéro renseigné (Google) : le rapprochement doit
+    se faire par nom normalisé (agents/prospection/matching.py), pas seulement par
+    téléphone."""
+    monkeypatch.setattr(settings, "meta_app_id", "test-app-id")
+    monkeypatch.setattr(settings, "meta_app_secret", "test-app-secret")
+
+    google_payload = {
+        "places": [{"displayName": {"text": "Café de l'Étoile"}, "nationalPhoneNumber": "+24101010101"}]
+    }
+    # Même nom après normalisation (accents/ponctuation), aucun téléphone renseigné côté Meta.
+    meta_payload = {"data": [{"name": "CAFE DE L'ETOILE !"}]}
+
+    prospects = search_and_score(
+        client_id,
+        "café Libreville",
+        "boutique",
+        db=db_session,
+        http_client=_FakeHttpClient(google_payload),
+        meta_http_client=_FakeMetaHttpClient(meta_payload),
+    )
+
+    assert len(prospects) == 1
+    assert prospects[0].source == "google_places"
+
+
+def test_search_and_score_keeps_distinct_businesses_with_different_names(
+    db_session: Session, client_id: uuid.UUID, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "meta_app_id", "test-app-id")
+    monkeypatch.setattr(settings, "meta_app_secret", "test-app-secret")
+
+    google_payload = {"places": [{"displayName": {"text": "Restaurant Awa"}}]}
+    meta_payload = {"data": [{"name": "Restaurant Awadi"}]}
+
+    prospects = search_and_score(
+        client_id,
+        "restaurant Libreville",
+        "restaurant",
+        db=db_session,
+        http_client=_FakeHttpClient(google_payload),
+        meta_http_client=_FakeMetaHttpClient(meta_payload),
+    )
+
+    assert len(prospects) == 2

@@ -1318,3 +1318,38 @@ stockage de credentials — sujet sensible à ne pas deviner) :
   expiré ou mal copié n'est détecté qu'au premier usage réel par Réseaux sociaux/
   Prospection.
 - Toutes les autres questions ouvertes des entrées précédentes restent valables.
+
+## 2026-09-20 — Prospection : rapprochement de sources par nom normalisé
+
+**Contexte** : suite de "réalise le non fait", demande de continuer sur Prospection ou
+Maintenance. Les points Maintenance restants (authentification staff, monitor UptimeRobot
+auto-créé, scan d'en-têtes HTTP) restent hors de portée sans nouvelle décision produit
+(comptes individuels, schéma d'URL publique) — non retentés ici. Repris le dernier point
+Prospection raisonnablement autonome : la déduplication Google Places/Meta Pages ne
+fonctionnait que par téléphone commun, documentée comme limitée depuis l'ajout de Meta
+Pages.
+
+**Implémentation**
+- `agents/prospection/matching.py::normalize_business_name` — normalise accents, casse,
+  ponctuation, espaces. **Décision délibérée** : correspondance **exacte** après
+  normalisation, jamais de similarité floue (Levenshtein etc.) — un faux positif (fusionner
+  deux établissements réellement différents) est plus grave qu'un doublon occasionnel non
+  détecté, qui reste visible et corrigible (deux fiches au lieu d'une), alors qu'une fusion
+  erronée perdrait silencieusement une fiche prospect légitime.
+- `agents/prospection/agent.py::_merge_sources` — dédupliquée maintenant en deux passes :
+  téléphone commun d'abord (signal le plus fiable), puis nom normalisé pour les
+  établissements sans téléphone commun (l'un des deux ne l'a pas renseigné).
+- Testé : normalisation (accents/ponctuation/espaces, stabilité sur une entrée déjà
+  normalisée, deux noms proches mais réellement distincts restent distincts), et
+  intégration dans `search_and_score` (rapprochement sans téléphone commun, non-fusion de
+  deux établissements différents).
+- 174 tests au total (contre 168 avant ce lot), tous passent. Packaging non-éditable
+  revérifié.
+
+**Questions ouvertes restantes**
+- Rapprochement toujours limité à une correspondance exacte après normalisation — deux
+  fiches écrites de façon très différente (enseigne vs nom légal) ne sont pas rapprochées,
+  délibérément (voir justification dans `matching.py`).
+- Toutes les autres questions ouvertes des entrées précédentes restent valables (Playwright,
+  flux OAuth WhatsApp/Meta, vraie authentification staff, monitor UptimeRobot auto-créé,
+  scan d'en-têtes HTTP des sites clients).

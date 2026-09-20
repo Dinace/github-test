@@ -125,17 +125,24 @@ ou "non joignable" (CLAUDE.md §5).
   signal robuste vu son ancienneté comme standard) → `outdated` ; sinon `modern`. **Note
   d'honnêteté** (même esprit que `security_scan.py`) : c'est une heuristique technique, pas
   un audit de conception/SEO — peut mal classer un cas inhabituel dans les deux sens.
+- `matching.py` : `normalize_business_name(name)` — normalisation (accents, casse,
+  ponctuation, espaces) pour rapprocher deux fiches d'un même établissement sans téléphone
+  commun. **Décision délibérée** : correspondance exacte après normalisation, jamais de
+  similarité floue (Levenshtein etc.) — un faux positif (fusionner deux établissements
+  réellement différents) est plus grave qu'un doublon occasionnel non détecté, qui reste
+  visible et corrigible. Justification complète dans le fichier.
 - `agent.py` : `search_and_score` — enchaîne recherche Google Places + Meta Pages
-  (`_merge_sources`, dédupliquées par numéro de téléphone — signal d'identité le plus
-  fiable entre deux API différentes, Google Places prioritaire à égalité) → dérivation des
-  signaux (dont la visite réelle du site via `website_audit.py` quand un `website_uri`
-  existe, comble l'ancienne simplification "présence = moderne") → scoring → création des
-  fiches en base, avec `Prospect.source` reflétant l'origine réelle (`google_places` ou
-  `meta_pages`) de chaque fiche. `http_client` (Google Places), `meta_http_client` (Meta
-  Pages) et `website_http_client` (visite des sites) sont injectables séparément, trois
-  intégrations distinctes avec des besoins de test différents. Simplification restante : le
-  secteur est considéré comme correspondant au catalogue par construction (la recherche
-  cible déjà un secteur donné).
+  (`_merge_sources`, dédupliquées par numéro de téléphone d'abord — signal d'identité le
+  plus fiable entre deux API différentes —, puis par nom normalisé via `matching.py` pour
+  les établissements sans téléphone commun ; Google Places prioritaire à égalité) →
+  dérivation des signaux (dont la visite réelle du site via `website_audit.py` quand un
+  `website_uri` existe, comble l'ancienne simplification "présence = moderne") → scoring →
+  création des fiches en base, avec `Prospect.source` reflétant l'origine réelle
+  (`google_places` ou `meta_pages`) de chaque fiche. `http_client` (Google Places),
+  `meta_http_client` (Meta Pages) et `website_http_client` (visite des sites) sont
+  injectables séparément, trois intégrations distinctes avec des besoins de test
+  différents. Simplification restante : le secteur est considéré comme correspondant au
+  catalogue par construction (la recherche cible déjà un secteur donné).
 - Endpoints (`app/routers/prospection.py`), authentifiés par clé API client (comme
   `sites.py`/`posts.py`) : `POST /api/prospects/search`, `GET /api/prospects`, `POST
   /api/prospects/{id}/propose-contact` (**bloqué en code**, 403, si la catégorie est
@@ -145,8 +152,9 @@ ou "non joignable" (CLAUDE.md §5).
   `?format=`).
 - Testé : conformité (LinkedIn bloqué, y compris en sous-domaine), scoring (les 4
   catégories, seuils configurables), recherche Google Places et Meta Pages (y compris
-  dégradation silencieuse sans credentials, et déduplication par téléphone entre les deux
-  sources), détection heuristique du statut d'un site (moderne/obsolète/absent, y compris
+  dégradation silencieuse sans credentials, déduplication par téléphone et par nom
+  normalisé entre les deux sources, et non-fusion de deux établissements réellement
+  distincts), détection heuristique du statut d'un site (moderne/obsolète/absent, y compris
   échec réseau et HTTP >= 400), structuration/génération de contenu (client Claude simulé),
   envoi WhatsApp (client HTTP simulé), génération de PDF et de PowerPoint (contenu relu
   après génération, pas seulement la signature du fichier), et le flux complet de contact
@@ -160,10 +168,11 @@ ou "non joignable" (CLAUDE.md §5).
   restent à faire si le besoin se confirme (skills retenue mais pas codée).
 - **Flux de connexion WhatsApp Business** (comme pour Meta) — credentials renseignés
   manuellement en attendant.
-- Rapprochement de sources au-delà du numéro de téléphone : deux fiches du même
-  établissement sans téléphone commun (ex. trouvé sous des noms légèrement différents sur
-  Google Places et Meta) ne sont pas dédupliquées — un rapprochement par nom serait plus
-  fragile, pas fait sans besoin démontré.
+- Rapprochement de sources limité à une correspondance exacte après normalisation du nom
+  (`matching.py`) — deux fiches du même établissement écrites de façon très différente
+  (ex. enseigne vs nom légal) ne sont toujours pas rapprochées ; délibérément pas de
+  similarité floue (voir justification dans `matching.py`), à revoir seulement si des
+  doublons de ce type se confirment être un problème réel en usage.
 - Vérification de connectivité réelle : Google Places, Meta Pages et WhatsApp Cloud API
   n'ont jamais été appelés contre de vrais services dans cette session (pas de clés/app
   disponibles) — seule la logique est testée avec des doublures. Idem pour

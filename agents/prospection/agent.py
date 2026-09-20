@@ -5,6 +5,7 @@ import uuid
 import httpx
 from sqlalchemy.orm import Session
 
+from agents.prospection.matching import normalize_business_name
 from agents.prospection.scoring import ProspectSignals, WebsiteStatus, score_prospect
 from agents.prospection.sources.google_places import RawPlaceResult, search_places
 from agents.prospection.sources.meta_pages import search_pages
@@ -16,18 +17,24 @@ from platform_core.models import Prospect
 def _merge_sources(
     places: list[RawPlaceResult], pages: list[RawPlaceResult]
 ) -> list[tuple[RawPlaceResult, str]]:
-    """Combine les deux sources, dédupliquées par numéro de téléphone (signal d'identité le
-    plus fiable entre deux API différentes — un rapprochement par nom serait plus fragile,
-    pas fait ici faute de besoin démontré). Google Places reste prioritaire à égalité de
-    résultat : ordre d'appel dans `search_and_score`, jamais l'inverse."""
+    """Combine les deux sources, dédupliquées par numéro de téléphone d'abord (signal
+    d'identité le plus fiable entre deux API différentes), puis par nom normalisé
+    (agents/prospection/matching.py — correspondance exacte après normalisation, jamais de
+    similarité floue, voir la justification dans ce module) pour les établissements sans
+    téléphone commun. Google Places reste prioritaire à égalité de résultat : ordre d'appel
+    dans `search_and_score`, jamais l'inverse."""
     seen_phones = {place.phone_number for place in places if place.phone_number}
+    seen_names = {normalize_business_name(place.name) for place in places}
     merged = [(place, "google_places") for place in places]
     for page in pages:
         if page.phone_number and page.phone_number in seen_phones:
             continue
+        if normalize_business_name(page.name) in seen_names:
+            continue
         merged.append((page, "meta_pages"))
         if page.phone_number:
             seen_phones.add(page.phone_number)
+        seen_names.add(normalize_business_name(page.name))
     return merged
 
 
