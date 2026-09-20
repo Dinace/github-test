@@ -1,3 +1,4 @@
+import uuid
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 
@@ -12,6 +13,7 @@ from agents.reseaux_sociaux.content import PostContent
 from app.main import app
 from platform_core.auth import create_client_with_api_key
 from platform_core.db import Base, get_db
+from platform_core.models import ActivityEvent
 
 _BRIEF_PAYLOAD = {
     "objective": "promotion",
@@ -83,6 +85,24 @@ def test_full_workflow_up_to_scheduling(
     assert schedule_resp.status_code == 200
     assert schedule_resp.json()["status"] == "scheduled"
 
+    # Journalisé pour l'agent Planning (platform_core.activity.log_event) — comble le point
+    # ouvert "Réseaux sociaux n'émet pas encore d'événements".
+    event_types = [
+        e.event_type
+        for e in db_session.query(ActivityEvent)
+        .filter(ActivityEvent.entity_id == uuid.UUID(post_id))
+        .order_by(ActivityEvent.occurred_at)
+        .all()
+    ]
+    assert event_types == [
+        "created",
+        "content_generated",
+        "changes_requested",
+        "content_generated",
+        "validated",
+        "scheduled",
+    ]
+
 
 def test_publish_requires_meta_connection(
     monkeypatch: pytest.MonkeyPatch, db_session: Session, auth_headers: dict[str, str]
@@ -130,6 +150,14 @@ def test_publish_succeeds_once_meta_is_connected(
     publish_resp = client.post(f"/api/posts/{post_id}/publish", headers=auth_headers)
     assert publish_resp.status_code == 200
     assert publish_resp.json()["status"] == "published"
+
+    last_event = (
+        db_session.query(ActivityEvent)
+        .filter(ActivityEvent.entity_id == uuid.UUID(post_id))
+        .order_by(ActivityEvent.occurred_at.desc())
+        .first()
+    )
+    assert last_event.event_type == "published"
 
 
 def test_cannot_validate_a_post_still_in_draft(db_session: Session, auth_headers: dict[str, str]) -> None:

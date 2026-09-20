@@ -84,11 +84,14 @@ secteur venait à perdre son template dédié.
   `app/routers/sites.py` — `POST /api/sites` (créer), `POST /api/sites/{id}/generate`
   (générer le brouillon), `GET /api/sites/{id}/preview` (prévisualiser), `POST
   /api/sites/{id}/publish` (valider → promotion R2 `draft/` → `live/` →
-  `SiteStatus.published`).
+  `SiteStatus.published`). Chacune de ces trois actions (hors prévisualisation, en lecture
+  seule) journalise un événement (`platform_core.activity.log_event`, catégories `created`/
+  `content_generated`/`published`) lu par l'agent Planning pour son résumé transverse.
 - Testé : génération de contenu (client Claude simulé), rendu Jinja2 (les 10 templates +
   filet de sécurité de repli), stockage R2 (client S3 simulé), authentification (génération/
-  vérification de clé), et le flux complet créer→générer→prévisualiser→publier via l'API
-  (voir `tests/`) — aucun appel réseau réel dans la suite de tests.
+  vérification de clé), et le flux complet créer→générer→prévisualiser→publier via l'API,
+  y compris la journalisation d'événements (voir `tests/`) — aucun appel réseau réel dans la
+  suite de tests.
 
 ## Authentification et cloisonnement (tranché)
 

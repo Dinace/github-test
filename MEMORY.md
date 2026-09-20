@@ -983,3 +983,39 @@ suivant — l'infrastructure de planification qui débloque plusieurs agents à 
 - Instrumentation `ActivityEvent` toujours manquante pour Création de site et Réseaux
   sociaux (seul Prospection émet des événements).
 - Toutes les autres questions ouvertes des entrées précédentes restent valables.
+
+## 2026-09-20 — Instrumentation ActivityEvent pour Création de site et Réseaux sociaux
+
+**Contexte** : dernier élément de la liste priorisée du lot "réalise le non fait" —
+Création de site et Réseaux sociaux n'émettaient encore aucun événement vers le journal
+partagé (`platform_core.models.ActivityEvent`), contrairement à Prospection.
+
+- `app/routers/sites.py` : `POST /api/sites`, `.../generate` et `.../publish` journalisent
+  respectivement `created`, `content_generated`, `published` (`agent="creation_site"`).
+  `.../publish` ne journalise que lors d'une vraie transition (pas sur un appel idempotent
+  d'un site déjà publié), cohérent avec le commentaire déjà présent sur l'idempotence.
+- `app/routers/posts.py` : les 6 transitions (`created`, `content_generated`,
+  `changes_requested`, `validated`, `scheduled`, `published`) journalisent
+  (`agent="reseaux_sociaux"`).
+- `agents/reseaux_sociaux/scheduled_jobs.py::publish_due_posts` journalise aussi `published`
+  (avec `details={"triggered_by": "scheduled_job"}`) pour que le journal reste complet que
+  la publication vienne de l'endpoint manuel ou de la tâche planifiée du lot précédent —
+  sans ce détail, l'agent Planning ne pourrait pas distinguer les deux origines s'il en a
+  besoin plus tard.
+- Testé : assertions sur la séquence complète d'événements dans les tests d'API existants
+  (`tests/test_sites_api.py`, `tests/test_posts_api.py`) plutôt que des tests séparés — un
+  test de flux qui affirme déjà chaque transition HTTP est le bon endroit pour vérifier
+  aussi ce qu'elle journalise. Ajouté aussi à `tests/test_scheduled_jobs.py`.
+- 121 tests au total (compte inchangé : assertions ajoutées à des tests existants, pas de
+  nouveaux tests séparés pour ce lot). Packaging non-éditable revérifié.
+
+**Bilan du lot "réalise le non fait" (3 sessions de travail)** : les deux failles de
+sécurité réelles (chiffrement au repos, signature webhook Sentry) sont corrigées ;
+l'infrastructure de planification (APScheduler) est en place et branchée sur Réseaux
+sociaux + Maintenance ; l'instrumentation `ActivityEvent` couvre désormais 3 agents sur 4
+(Maintenance exclu par design, ses actions n'étant pas client-scoped). Restent
+explicitement non traités, à reprendre en lots dédiés : rappels de RDV automatiques de
+Planning (bloqués sur des décisions de modélisation non encore prises — voir l'entrée
+précédente), génération de visuels Pillow, export PowerPoint des offres, recherche Meta
+Graph API pour Prospection, scan d'en-têtes HTTP des sites clients, vrai système de comptes
+staff, flux OAuth Meta/WhatsApp, synchronisation calendrier externe.

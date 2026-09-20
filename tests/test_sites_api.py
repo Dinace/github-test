@@ -12,6 +12,7 @@ from agents.creation_site.content import ContentItem, SiteContent
 from app.main import app
 from platform_core.auth import create_client_with_api_key
 from platform_core.db import Base, get_db
+from platform_core.models import ActivityEvent
 
 
 @pytest.fixture()
@@ -85,6 +86,17 @@ def test_create_generate_preview_publish_flow(
     publish_resp = client.post(f"/api/sites/{site_id}/publish", headers=auth_headers)
     assert publish_resp.status_code == 200
     assert publish_resp.json()["status"] == "published"
+
+    # Journalisé pour l'agent Planning (platform_core.activity.log_event) — comble le point
+    # ouvert "Création de site n'émet pas encore d'événements".
+    event_types = [
+        e.event_type
+        for e in db_session.query(ActivityEvent)
+        .filter(ActivityEvent.entity_id == uuid.UUID(site_id))
+        .order_by(ActivityEvent.occurred_at)
+        .all()
+    ]
+    assert event_types == ["created", "content_generated", "published"]
 
 
 def test_preview_before_generation_returns_conflict(

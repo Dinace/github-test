@@ -10,6 +10,7 @@ from agents.reseaux_sociaux import meta
 from agents.reseaux_sociaux.brief import PostBrief
 from agents.reseaux_sociaux.content import ContentGenerationError, PostContent
 from app.auth import get_current_client
+from platform_core.activity import log_event
 from platform_core.db import get_db
 from platform_core.models import Client, Post, PostStatus
 
@@ -49,6 +50,14 @@ def create_post(
     db.add(post)
     db.commit()
     db.refresh(post)
+    log_event(
+        db,
+        client_id=current_client.id,
+        agent="reseaux_sociaux",
+        entity_type="post",
+        entity_id=post.id,
+        event_type="created",
+    )
     return {"id": str(post.id), "status": post.status.value}
 
 
@@ -70,6 +79,14 @@ def generate_post(
     post.content = content.model_dump(mode="json")
     post.status = PostStatus.pending_validation
     db.commit()
+    log_event(
+        db,
+        client_id=current_client.id,
+        agent="reseaux_sociaux",
+        entity_type="post",
+        entity_id=post.id,
+        event_type="content_generated",
+    )
     return {"id": str(post.id), "status": post.status.value}
 
 
@@ -87,6 +104,14 @@ def request_changes(
     post.content = None
     post.status = PostStatus.draft
     db.commit()
+    log_event(
+        db,
+        client_id=current_client.id,
+        agent="reseaux_sociaux",
+        entity_type="post",
+        entity_id=post.id,
+        event_type="changes_requested",
+    )
     return {"id": str(post.id), "status": post.status.value}
 
 
@@ -101,6 +126,14 @@ def validate_post(
 
     post.status = PostStatus.validated
     db.commit()
+    log_event(
+        db,
+        client_id=current_client.id,
+        agent="reseaux_sociaux",
+        entity_type="post",
+        entity_id=post.id,
+        event_type="validated",
+    )
     return {"id": str(post.id), "status": post.status.value}
 
 
@@ -125,6 +158,15 @@ def schedule_post(
     post.scheduled_at = scheduled_at
     post.status = PostStatus.scheduled
     db.commit()
+    log_event(
+        db,
+        client_id=current_client.id,
+        agent="reseaux_sociaux",
+        entity_type="post",
+        entity_id=post.id,
+        event_type="scheduled",
+        details={"scheduled_at": scheduled_at.isoformat()},
+    )
     return {"id": str(post.id), "status": post.status.value, "scheduled_at": scheduled_at.isoformat()}
 
 
@@ -147,4 +189,12 @@ def publish_post(
     post.status = PostStatus.published
     post.published_at = datetime.now(UTC)
     db.commit()
+    log_event(
+        db,
+        client_id=current_client.id,
+        agent="reseaux_sociaux",
+        entity_type="post",
+        entity_id=post.id,
+        event_type="published",
+    )
     return {"id": str(post.id), "status": post.status.value}

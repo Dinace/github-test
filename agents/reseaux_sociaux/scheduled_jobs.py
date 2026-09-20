@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from agents.reseaux_sociaux import agent as post_agent
 from agents.reseaux_sociaux import meta
+from platform_core.activity import log_event
 from platform_core.models import (
     Client,
     Notification,
@@ -70,5 +71,15 @@ def publish_due_posts(session_factory: Callable[[], AbstractContextManager[Sessi
 
             post.status = PostStatus.published
             post.published_at = now
+            db.commit()
+            log_event(
+                db,
+                client_id=client.id,
+                agent="reseaux_sociaux",
+                entity_type="post",
+                entity_id=post.id,
+                event_type="published",
+                details={"triggered_by": "scheduled_job"},
+            )
 
         db.commit()

@@ -11,6 +11,7 @@ from agents.creation_site.brief import SiteBrief
 from agents.creation_site.content import ContentGenerationError, SiteContent
 from agents.creation_site.render import render_site
 from app.auth import get_current_client
+from platform_core.activity import log_event
 from platform_core.db import get_db
 from platform_core.models import Client, Site, SiteStatus
 
@@ -43,6 +44,14 @@ def create_site(
     db.add(site)
     db.commit()
     db.refresh(site)
+    log_event(
+        db,
+        client_id=current_client.id,
+        agent="creation_site",
+        entity_type="site",
+        entity_id=site.id,
+        event_type="created",
+    )
     return {"id": str(site.id), "status": site.status.value}
 
 
@@ -62,6 +71,14 @@ def generate_site(
 
     site.content = content.model_dump(mode="json")
     db.commit()
+    log_event(
+        db,
+        client_id=current_client.id,
+        agent="creation_site",
+        entity_type="site",
+        entity_id=site.id,
+        event_type="content_generated",
+    )
     return {"id": str(site.id), "status": site.status.value}
 
 
@@ -88,11 +105,20 @@ def publish_site(
 ) -> dict:
     site = _get_owned_site(site_id, current_client, db)
 
-    # Idempotent : publier un site déjà publié ne refait pas la promotion R2 (pas d'erreur).
+    # Idempotent : publier un site déjà publié ne refait pas la promotion R2 (pas d'erreur),
+    # ni une nouvelle entrée dans le journal d'activité.
     if site.status != SiteStatus.published:
         storage.promote_to_live(site.id)
         site.status = SiteStatus.published
         site.published_at = datetime.now(UTC)
         db.commit()
+        log_event(
+            db,
+            client_id=current_client.id,
+            agent="creation_site",
+            entity_type="site",
+            entity_id=site.id,
+            event_type="published",
+        )
 
     return {"id": str(site.id), "status": site.status.value}

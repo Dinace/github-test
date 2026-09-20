@@ -73,6 +73,12 @@ def test_publish_due_posts_publishes_and_marks_published(session_factory, monkey
         assert reloaded.status == PostStatus.published
         assert reloaded.published_at is not None
 
+        from platform_core.models import ActivityEvent
+
+        event = db.query(ActivityEvent).filter(ActivityEvent.entity_id == post_id).one()
+        assert event.event_type == "published"
+        assert event.details == {"triggered_by": "scheduled_job"}
+
 
 def test_publish_due_posts_ignores_not_yet_due(session_factory, monkeypatch: pytest.MonkeyPatch) -> None:
     client = _make_client(session_factory, meta_page_id="page-1", meta_page_access_token="token-1")

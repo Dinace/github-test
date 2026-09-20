@@ -68,7 +68,8 @@ n'est pas confirmée — la clé reste documentée dans `config/credentials/` sa
   (fixe `scheduled_at`), `POST /api/posts/{id}/publish` (appel Meta réel — 412 si le client
   n'a pas connecté sa Page Meta). Chaque transition de statut est vérifiée strictement
   (409 si l'action ne correspond pas au statut courant) — aucun raccourci possible, comme
-  décidé ci-dessus.
+  décidé ci-dessus. Chaque transition journalise aussi un événement
+  (`platform_core.activity.log_event`) lu par l'agent Planning pour son résumé transverse.
 - Connexion Meta du client : `Client.meta_page_id` / `Client.meta_page_access_token`,
   renseignés manuellement pour l'instant (voir points ouverts). Le token est chiffré au
   repos (`platform_core.models.EncryptedString`, voir `platform_core/encryption.py`) —

@@ -33,9 +33,13 @@ justifie pas ; à réévaluer si le volume de RDV staff augmente significativeme
 ## Implémentation actuelle
 
 - `platform_core/activity.py` + `platform_core.models.ActivityEvent` : journal partagé,
-  alimenté pour l'instant uniquement par l'agent Prospection (`created`, `contact_proposed`,
-  `contact_validated`, `contact_sent`) — les 3 autres agents n'émettent pas encore
-  d'événements (voir points ouverts).
+  alimenté par Prospection (`created`, `contact_proposed`, `contact_validated`,
+  `contact_sent`), Création de site (`created`, `content_generated`, `published`) et Réseaux
+  sociaux (`created`, `content_generated`, `changes_requested`, `validated`, `scheduled`,
+  `published` — y compris depuis la tâche planifiée d'auto-publication, pas seulement les
+  endpoints manuels). Maintenance n'émet volontairement rien ici : ses actions sont
+  déclenchées par le staff ou par des tâches planifiées, pas par un client à travers son
+  propre pipeline d'activité (voir points ouverts).
 - `dashboard.py` : `get_client_activity_summary(client_id)` — compte les sites en brouillon
   avec contenu généré, les posts en attente de validation, les prospects à qualifier et les
   prospects en attente de validation de contact.
@@ -67,10 +71,12 @@ colonne `JSON` comme un littéral JSON `"null"`, **pas** un vrai `NULL` SQL — 
 
 ## Points ouverts (pas encore fait, explicitement)
 
-- Les agents Création de site, Réseaux sociaux et Maintenance n'émettent pas encore
-  d'événements vers `ActivityEvent` — seul Prospection le fait. Le résumé transverse
-  (`dashboard.py`) reste donc basé sur une lecture directe de leurs tables, pas sur le
-  journal, pour l'instant cohérent mais à terme les deux mécanismes devront converger.
+- Le résumé transverse (`dashboard.py`) reste basé sur une lecture directe des tables
+  Site/Post/Prospect, pas sur `ActivityEvent` — cohérent avec ce que journalise chaque
+  agent aujourd'hui (Maintenance n'émet toujours rien, ses actions n'étant pas initiées par
+  un client), mais les deux mécanismes (lecture directe vs journal d'événements) devront
+  converger si `dashboard.py` a un jour besoin de l'historique, pas seulement du compte
+  courant.
 - Rappels de RDV automatiques (WhatsApp) — le module existe (`agents.prospection.whatsapp`)
   mais n'est pas branché sur les RDV.
 - Synchronisation avec un vrai calendrier externe (Google Calendar) côté staff.
