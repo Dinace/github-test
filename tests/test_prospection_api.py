@@ -149,6 +149,28 @@ def test_get_offer_returns_pdf(db_session: Session, auth_headers: dict[str, str]
     assert resp.content.startswith(b"%PDF")
 
 
+def test_get_offer_returns_pptx_when_requested(db_session: Session, auth_headers: dict[str, str]) -> None:
+    client_row = db_session.query(Client).first()
+    prospect = _make_prospect(db_session, client_row.id, ProspectCategory.favorable)
+
+    client = TestClient(app)
+    resp = client.get(f"/api/prospects/{prospect.id}/offer", headers=auth_headers, params={"format": "pptx"})
+
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+    assert resp.content.startswith(b"PK")
+
+
+def test_get_offer_rejects_unknown_format(db_session: Session, auth_headers: dict[str, str]) -> None:
+    client_row = db_session.query(Client).first()
+    prospect = _make_prospect(db_session, client_row.id, ProspectCategory.favorable)
+
+    client = TestClient(app)
+    resp = client.get(f"/api/prospects/{prospect.id}/offer", headers=auth_headers, params={"format": "docx"})
+
+    assert resp.status_code == 422
+
+
 def test_client_cannot_access_another_clients_prospect(db_session: Session, auth_headers: dict[str, str]) -> None:
     client_row = db_session.query(Client).first()
     prospect = _make_prospect(db_session, client_row.id, ProspectCategory.favorable)

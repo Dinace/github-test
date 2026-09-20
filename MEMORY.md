@@ -1113,3 +1113,38 @@ visiter.
 - Toutes les autres questions ouvertes des entrées précédentes restent valables (Playwright,
   Meta Graph API pour la recherche de prospects, python-pptx, flux OAuth WhatsApp/Meta,
   vraie authentification staff, etc.).
+
+## 2026-09-20 — Prospection : export PowerPoint des offres (python-pptx)
+
+**Contexte** : suite de "réalise le non fait", demande explicite de continuer sur
+Prospection ou Maintenance. Les deux points Maintenance restants (monitor UptimeRobot,
+scan d'en-têtes HTTP) restent bloqués sur l'absence d'URL publique de site (voir entrée
+précédente, pas retentée ici sans nouvelle décision de modélisation). Repris sur
+Prospection : `python-pptx` était déjà retenu dans le tableau des skills
+(agents/prospection/skills/README.md) mais jamais codé, seul le PDF (ReportLab) existait.
+
+**Implémentation**
+- `agents/prospection/offer.py::generate_offer_pptx` — même contenu que
+  `generate_offer_pdf` (titre, pack, points forts), une seule diapositive (l'offre sert le
+  même usage commercial, pas un deck multi-diapositives). Layout vide
+  (`slide_layouts[6]`) avec des zones de texte ajoutées explicitement plutôt que des
+  placeholders de layout prédéfinis, dont les index varient selon le modèle PowerPoint
+  sous-jacent.
+- `app/routers/prospection.py::get_offer` — nouveau paramètre `?format=pdf|pptx` (`pdf` par
+  défaut, conserve la compatibilité des appels existants sans le paramètre), 422 sur tout
+  autre format.
+- Ajout de la dépendance `python-pptx` à `pyproject.toml`.
+- Testé : contenu de la présentation généré relu après génération (pas seulement la
+  signature de fichier `PK`) pour vérifier que le nom du prospect, le pack et les points
+  forts apparaissent bien dans le texte des diapositives ; endpoint API avec `?format=pptx`
+  (content-type correct) et avec un format invalide (422).
+- Au passage, corrigé un `RUF059` préexistant dans `offer.py` (`width` jamais utilisé dans
+  `generate_offer_pdf`) repéré en lintant le fichier — sans lien avec l'ajout PowerPoint,
+  corrigé simplement parce que déjà dans le même fichier.
+- 136 tests au total (contre 133 avant ce lot), tous passent. Packaging non-éditable
+  revérifié (import + génération réelle d'un fichier `.pptx` depuis l'installation).
+
+**Questions ouvertes restantes**
+- Toutes les questions ouvertes des entrées précédentes restent valables (Playwright, Meta
+  Graph API pour la recherche de prospects, flux OAuth WhatsApp/Meta, vraie authentification
+  staff, monitor UptimeRobot auto-créé, scan d'en-têtes HTTP des sites clients).

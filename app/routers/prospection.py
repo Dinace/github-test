@@ -9,7 +9,11 @@ from sqlalchemy.orm import Session
 from agents.prospection import agent as prospection_agent
 from agents.prospection import whatsapp
 from agents.prospection.content import ContentGenerationError, generate_contact_message
-from agents.prospection.offer import default_highlights_for_pack, generate_offer_pdf
+from agents.prospection.offer import (
+    default_highlights_for_pack,
+    generate_offer_pdf,
+    generate_offer_pptx,
+)
 from app.auth import get_current_client
 from platform_core.activity import log_event
 from platform_core.db import get_db
@@ -178,11 +182,24 @@ def send_contact(
 
 @router.get("/{prospect_id}/offer")
 def get_offer(
-    prospect_id: uuid.UUID, current_client: Client = Depends(get_current_client), db: Session = Depends(get_db)
+    prospect_id: uuid.UUID,
+    format: str = "pdf",
+    current_client: Client = Depends(get_current_client),
+    db: Session = Depends(get_db),
 ) -> Response:
     prospect = _get_owned_prospect(prospect_id, current_client, db)
 
     pack = current_client.subscription.pack if current_client.subscription else Pack.starter
-    pdf_bytes = generate_offer_pdf(prospect.business_name, pack, default_highlights_for_pack(pack))
+    highlights = default_highlights_for_pack(pack)
 
+    if format == "pptx":
+        pptx_bytes = generate_offer_pptx(prospect.business_name, pack, highlights)
+        return Response(
+            content=pptx_bytes,
+            media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        )
+    if format != "pdf":
+        raise HTTPException(status_code=422, detail="Format non supporté : 'pdf' ou 'pptx' attendu")
+
+    pdf_bytes = generate_offer_pdf(prospect.business_name, pack, highlights)
     return Response(content=pdf_bytes, media_type="application/pdf")

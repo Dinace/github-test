@@ -100,9 +100,12 @@ ou "non joignable" (CLAUDE.md §5).
   Nécessite `Client.whatsapp_phone_number_id`/`whatsapp_access_token` (renseignés
   manuellement, pas de flux de connexion automatisé — même limite que
   `agents/reseaux_sociaux/meta.py`).
-- `offer.py` : `generate_offer_pdf` — génère un PDF d'offre par pack (ReportLab). Choix de
-  scope : PDF uniquement pour l'instant, pas de génération PowerPoint (`python-pptx`) tant
-  que le besoin n'est pas confirmé.
+- `offer.py` : `generate_offer_pdf` (ReportLab) et `generate_offer_pptx` (python-pptx) —
+  même contenu (titre, pack, points forts), un seul PDF/une seule diapositive, choisi via
+  `GET /api/prospects/{id}/offer?format=pdf|pptx` (`pdf` par défaut, 422 sur tout autre
+  format). `generate_offer_pptx` utilise un layout vide (`slide_layouts[6]`) avec des zones
+  de texte ajoutées explicitement plutôt que des placeholders de layout prédéfinis, dont les
+  index varient selon le modèle PowerPoint sous-jacent — plus reproductible.
 - `website_audit.py` : `assess_website(url)` — visite réellement le site d'un prospect
   (client HTTP injectable) et retourne un statut heuristique (`none`/`outdated`/`modern`) :
   page injoignable ou HTTP >= 400 → `none` (même besoin qu'un prospect sans site) ; corps
@@ -123,13 +126,16 @@ ou "non joignable" (CLAUDE.md §5).
   /api/prospects/{id}/propose-contact` (**bloqué en code**, 403, si la catégorie est
   `non_favorable`/`non_joignable`, pas seulement documenté), `POST .../validate-contact`,
   `POST .../send-contact` (re-vérifie la catégorie en défense en profondeur + exige la
-  connexion WhatsApp, 412 sinon), `GET /api/prospects/{id}/offer` (PDF).
+  connexion WhatsApp, 412 sinon), `GET /api/prospects/{id}/offer` (PDF ou PowerPoint selon
+  `?format=`).
 - Testé : conformité (LinkedIn bloqué, y compris en sous-domaine), scoring (les 4
   catégories, seuils configurables), recherche Google Places, détection heuristique du
   statut d'un site (moderne/obsolète/absent, y compris échec réseau et HTTP >= 400),
   structuration/génération de contenu (client Claude simulé), envoi WhatsApp (client HTTP
-  simulé), génération de PDF, et le flux complet de contact via l'API (y compris le blocage
-  403 sur les catégories interdites) — aucun appel réseau réel dans la suite de tests.
+  simulé), génération de PDF et de PowerPoint (contenu relu après génération, pas seulement
+  la signature du fichier), et le flux complet de contact via l'API (y compris le blocage
+  403 sur les catégories interdites et le format d'offre invalide) — aucun appel réseau réel
+  dans la suite de tests.
 
 ## Points ouverts (pas encore fait, explicitement)
 
@@ -139,7 +145,6 @@ ou "non joignable" (CLAUDE.md §5).
 - **Meta Graph API pour la recherche de prospects** (Pages professionnelles) — seul Google
   Places est implémenté pour l'instant ; la clé `META_ADS_TOKEN` existe déjà côté Réseaux
   sociaux mais son usage côté Prospection reste à construire.
-- **python-pptx** non implémenté — seul le PDF (ReportLab) existe.
 - **Flux de connexion WhatsApp Business** (comme pour Meta) — credentials renseignés
   manuellement en attendant.
 - Vérification de connectivité réelle : Google Places et WhatsApp Cloud API n'ont jamais été
