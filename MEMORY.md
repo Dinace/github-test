@@ -1199,3 +1199,65 @@ au niveau **plateforme** (jamais un compte client), pour ce seul usage de recher
 - Toutes les autres questions ouvertes des entrées précédentes restent valables (Playwright,
   flux OAuth WhatsApp/Meta, vraie authentification staff, monitor UptimeRobot auto-créé,
   scan d'en-têtes HTTP des sites clients).
+
+## 2026-09-20 — "Office manager" : extension de Planning, pas un 6ᵉ agent
+
+**Demande utilisateur** : "Rajoute un agent office manager qui se chargera de suivre et
+d'indiquer les différentes étapes pour la mise en place de l'offre chez le client, qui le
+notifiera aux commerciaux et autres services de manière précise, trouver les meilleures
+skills."
+
+**Décisions clarifiées avec l'utilisateur avant implémentation** (2 questions posées via
+AskUserQuestion, l'ambiguïté étant structurante — le mauvais choix aurait dupliqué du
+périmètre ou violé le cloisonnement) :
+1. Relation à l'agent Planning existant, qui fait déjà du suivi transverse de l'activité
+   client : **extension de Planning**, pas un agent séparé (l'utilisateur a tranché contre
+   la recommandation initiale de créer `agents/office_manager/`).
+2. Périmètre : **interne, hors packs**, comme Planning — jamais vu par le client, cohérent
+   avec "notifie les commerciaux" (une équipe interne).
+
+Conséquence directe de (1) : aucun nouveau dossier `agents/office_manager/`, aucune entrée
+dans CLAUDE.md §2 (table des 4 agents packagés) — le tout vit dans `agents/planning/`,
+documenté comme une capacité supplémentaire de Planning, pas comme un agent à part dans
+l'arborescence.
+
+**Implémentation**
+- `agents/planning/onboarding.py::get_onboarding_checklist(client_id)` — liste ordonnée
+  d'étapes ("les différentes étapes pour la mise en place de l'offre"), **calculées** à
+  partir de l'état courant (Site/Post/Prospect/Backup/Subscription), jamais une nouvelle
+  source de vérité dupliquée — même principe que `dashboard.py` déjà en place. Étapes
+  toujours présentes : site créé/contenu généré/publié, première sauvegarde confirmée
+  (ressource plateforme, pas par client — même décision que la cadence de sauvegarde d'une
+  session précédente). Étapes Business/Premium uniquement : première publication réseaux
+  sociaux, prospection démarrée (Starter ne les inclut pas, CLAUDE.md §1 — inutile de
+  notifier une étape non achetée).
+- Nouveau modèle `platform_core.models.OnboardingNotification` — **distinct** de
+  `Notification` (l'agent Maintenance) : audiences différentes (commercial/technique vs
+  anomalies techniques staff), et écrire dans la table de Maintenance aurait violé le
+  cloisonnement (CLAUDE.md §5, `Notification` lui appartient). Chaque notification porte une
+  `team` (`commercial`/`technique`), déterminée par l'étape franchie — c'est la réponse
+  concrète à "notifier les commerciaux et autres services de manière précise" : chaque
+  service ne voit que ce qui le concerne (`GET /api/planning/notifications?team=...`), pas
+  un flux unique mélangeant tout.
+- `agents/planning/scheduled_jobs.py::notify_onboarding_progress` — 6ᵉ tâche planifiée
+  (APScheduler, tick de 30 minutes, voir `platform_core/scheduler.py`) : une seule
+  notification par (client, étape) la première fois qu'elle est franchie, sans champ
+  "déjà notifié" dédié — l'existence de la notification sert elle-même de marqueur (une
+  étape ne redevient jamais non franchie).
+- Endpoints (`app/routers/planning.py`) : staff `GET /clients/{id}/onboarding`,
+  `GET /notifications` (filtrable par équipe), `POST /notifications/{id}/acknowledge` ;
+  client `GET /me/onboarding`.
+- Migration `9e07474bf202` (table `onboarding_notifications`), vérifiée dans les deux sens.
+- Testé : checklist par pack (présence/absence des étapes Réseaux sociaux/Prospection,
+  progression reflétée par les changements d'état réels), tâche planifiée (création unique
+  par étape, routage vers la bonne équipe, clients sans abonnement actif ignorés), et les 4
+  nouveaux endpoints via l'API (staff et client).
+- 154 tests au total (contre 141 avant ce lot), tous passent. Packaging non-éditable
+  revérifié ; smoke-test manuel du job contre une vraie base SQLite vide.
+
+**Questions ouvertes restantes**
+- Checklist figée dans le code, pas configurable par l'équipe (contrairement au scoring de
+  Prospection) — à revoir si les étapes doivent souvent changer.
+- Pas de canal de notification réel (email/Slack), uniquement surfacé via l'API — à
+  consulter activement, même limite que les `Notification` de Maintenance.
+- Toutes les autres questions ouvertes des entrées précédentes restent valables.

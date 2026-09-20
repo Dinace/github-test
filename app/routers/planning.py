@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -8,10 +8,16 @@ from sqlalchemy.orm import Session
 from agents.planning import appointments as appointments_module
 from agents.planning.dashboard import get_client_activity_summary
 from agents.planning.digest import generate_digest
+from agents.planning.onboarding import get_onboarding_checklist
 from agents.planning.pipeline import get_prospect_pipeline
 from app.auth import get_current_client, require_ops_token
 from platform_core.db import get_db
-from platform_core.models import Appointment, Client
+from platform_core.models import (
+    Appointment,
+    Client,
+    OnboardingNotification,
+    OnboardingNotificationStatus,
+)
 
 # Endpoints staff (équipe de la plateforme) : nécessitent OPS_API_TOKEN, même stopgap
 # d'authentification que l'agent Maintenance (voir app/auth.py::require_ops_token).
@@ -33,6 +39,10 @@ class CompleteAppointmentRequest(BaseModel):
     notes: str | None = None
 
 
+class AcknowledgeOnboardingNotificationRequest(BaseModel):
+    acknowledged_by: str
+
+
 def _serialize_appointment(appointment: Appointment) -> dict:
     return {
         "id": str(appointment.id),
@@ -43,6 +53,18 @@ def _serialize_appointment(appointment: Appointment) -> dict:
         "duration_minutes": appointment.duration_minutes,
         "status": appointment.status.value,
         "notes": appointment.notes,
+    }
+
+
+def _serialize_onboarding_notification(notification: OnboardingNotification) -> dict:
+    return {
+        "id": str(notification.id),
+        "client_id": str(notification.client_id),
+        "step_key": notification.step_key,
+        "team": notification.team.value,
+        "message": notification.message,
+        "status": notification.status.value,
+        "created_at": notification.created_at.isoformat(),
     }
 
 
@@ -60,9 +82,44 @@ def staff_get_client_digest(client_id: uuid.UUID, db: Session = Depends(get_db))
     return {"summary": summary.model_dump(), "digest": generate_digest(summary)}
 
 
+@staff_router.get("/clients/{client_id}/onboarding")
+def staff_get_client_onboarding(client_id: uuid.UUID, db: Session = Depends(get_db)) -> list[dict]:
+    return [step.model_dump() for step in get_onboarding_checklist(client_id, db=db)]
+
+
 @staff_router.get("/prospects/{prospect_id}/pipeline")
 def staff_get_prospect_pipeline(prospect_id: uuid.UUID, db: Session = Depends(get_db)) -> list[dict]:
     return [event.model_dump() for event in get_prospect_pipeline(prospect_id, db=db)]
+
+
+@staff_router.get("/notifications")
+def staff_list_onboarding_notifications(team: str | None = None, db: Session = Depends(get_db)) -> list[dict]:
+    """Notifications précises d'étapes franchies, filtrables par équipe (`?team=commercial`
+    ou `?team=technique`) — c'est ce que "notifier les commerciaux et autres services de
+    manière précise" recouvre concrètement : chaque service ne voit que ce qui le concerne,
+    pas un flux unique mélangeant tout."""
+    query = db.query(OnboardingNotification).filter(
+        OnboardingNotification.status == OnboardingNotificationStatus.pending
+    )
+    if team is not None:
+        query = query.filter(OnboardingNotification.team == team)
+    notifications = query.order_by(OnboardingNotification.created_at).all()
+    return [_serialize_onboarding_notification(n) for n in notifications]
+
+
+@staff_router.post("/notifications/{notification_id}/acknowledge")
+def staff_acknowledge_onboarding_notification(
+    notification_id: uuid.UUID, payload: AcknowledgeOnboardingNotificationRequest, db: Session = Depends(get_db)
+) -> dict:
+    notification = db.get(OnboardingNotification, notification_id)
+    if notification is None:
+        raise HTTPException(status_code=404, detail="Notification introuvable")
+
+    notification.status = OnboardingNotificationStatus.acknowledged
+    notification.acknowledged_by = payload.acknowledged_by
+    notification.acknowledged_at = datetime.now(UTC)
+    db.commit()
+    return _serialize_onboarding_notification(notification)
 
 
 @staff_router.post("/appointments", status_code=201)
@@ -101,6 +158,11 @@ def staff_complete_appointment(
 @client_router.get("/summary")
 def get_my_summary(current_client: Client = Depends(get_current_client), db: Session = Depends(get_db)) -> dict:
     return get_client_activity_summary(current_client.id, db=db).model_dump()
+
+
+@client_router.get("/onboarding")
+def get_my_onboarding(current_client: Client = Depends(get_current_client), db: Session = Depends(get_db)) -> list[dict]:
+    return [step.model_dump() for step in get_onboarding_checklist(current_client.id, db=db)]
 
 
 @client_router.get("/appointments")

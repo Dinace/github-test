@@ -21,6 +21,7 @@ from platform_core.models import (
     Client,
     Notification,
     NotificationCategory,
+    OnboardingNotification,
     Pack,
     Post,
     PostStatus,
@@ -506,3 +507,70 @@ def test_send_appointment_reminders_failure_notifies_once(session_factory, monke
             db.query(Notification).filter(Notification.category == NotificationCategory.error_spike).all()
         )
         assert len(notifications) == 1
+
+
+# --- Planning : notify_onboarding_progress (extension "office manager") -------------------
+
+
+def test_notify_onboarding_progress_creates_notification_for_completed_step(session_factory) -> None:
+    client = _make_client(session_factory, pack=Pack.starter)
+    with session_factory() as db:
+        db.add(Site(client_id=client, sector="restaurant", brief={}, content={"x": 1}, status=SiteStatus.published))
+        db.commit()
+
+    planning_jobs.notify_onboarding_progress(session_factory)
+
+    with session_factory() as db:
+        notifications = db.query(OnboardingNotification).filter(OnboardingNotification.client_id == client).all()
+        step_keys = {n.step_key for n in notifications}
+        assert "site_created" in step_keys
+        assert "site_content_generated" in step_keys
+        assert "site_published" in step_keys
+        assert "first_backup_confirmed" not in step_keys  # pas encore de sauvegarde
+
+
+def test_notify_onboarding_progress_does_not_duplicate(session_factory) -> None:
+    client = _make_client(session_factory, pack=Pack.starter)
+    with session_factory() as db:
+        db.add(Site(client_id=client, sector="restaurant", brief={}, status=SiteStatus.draft))
+        db.commit()
+
+    planning_jobs.notify_onboarding_progress(session_factory)
+    planning_jobs.notify_onboarding_progress(session_factory)
+
+    with session_factory() as db:
+        notifications = (
+            db.query(OnboardingNotification)
+            .filter(OnboardingNotification.client_id == client, OnboardingNotification.step_key == "site_created")
+            .all()
+        )
+        assert len(notifications) == 1
+
+
+def test_notify_onboarding_progress_ignores_clients_without_active_subscription(session_factory) -> None:
+    client = _make_client(session_factory)  # pas de pack actif
+    with session_factory() as db:
+        db.add(Site(client_id=client, sector="restaurant", brief={}, status=SiteStatus.published, content={"x": 1}))
+        db.commit()
+
+    planning_jobs.notify_onboarding_progress(session_factory)
+
+    with session_factory() as db:
+        assert db.query(OnboardingNotification).filter(OnboardingNotification.client_id == client).count() == 0
+
+
+def test_notify_onboarding_progress_routes_to_correct_team(session_factory) -> None:
+    client = _make_client(session_factory, pack=Pack.business)
+    with session_factory() as db:
+        db.add(Post(client_id=client, brief={}, status=PostStatus.published))
+        db.commit()
+
+    planning_jobs.notify_onboarding_progress(session_factory)
+
+    with session_factory() as db:
+        notification = (
+            db.query(OnboardingNotification)
+            .filter(OnboardingNotification.client_id == client, OnboardingNotification.step_key == "social_media_active")
+            .one()
+        )
+        assert notification.team.value == "commercial"

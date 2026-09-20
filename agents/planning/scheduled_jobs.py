@@ -23,6 +23,7 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.orm import Session
 
+from agents.planning.onboarding import get_onboarding_checklist
 from agents.prospection import whatsapp
 from platform_core.config import settings
 from platform_core.models import (
@@ -33,6 +34,9 @@ from platform_core.models import (
     NotificationCategory,
     NotificationSeverity,
     NotificationStatus,
+    OnboardingNotification,
+    OnboardingTeam,
+    Subscription,
 )
 
 # Fenêtre de rappel : un rendez-vous dont l'échéance tombe dans les 24h reçoit un rappel.
@@ -110,5 +114,43 @@ def send_appointment_reminders(session_factory: Callable[[], AbstractContextMana
                 continue
 
             appointment.reminder_sent_at = now
+
+        db.commit()
+
+
+def notify_onboarding_progress(session_factory: Callable[[], AbstractContextManager[Session]]) -> None:
+    """Notifie l'équipe interne concernée (commercial/technique) dès qu'une étape de mise en
+    place de l'offre est franchie pour un client — extension "office manager" de l'agent
+    Planning (agents/planning/onboarding.py). Une seule notification par (client, étape) :
+    l'existence d'une `OnboardingNotification` pour cette paire sert elle-même de marqueur
+    "déjà notifié", pas besoin d'un champ dédié supplémentaire (l'étape ne "redevient" jamais
+    non franchie une fois atteinte)."""
+    with session_factory() as db:
+        clients_with_active_subscription = (
+            db.query(Client).join(Subscription, Subscription.client_id == Client.id).filter(Subscription.active.is_(True)).all()
+        )
+
+        for client in clients_with_active_subscription:
+            checklist = get_onboarding_checklist(client.id, db=db)
+            for step in checklist:
+                if not step.done:
+                    continue
+
+                already_notified = (
+                    db.query(OnboardingNotification)
+                    .filter(OnboardingNotification.client_id == client.id, OnboardingNotification.step_key == step.key)
+                    .first()
+                )
+                if already_notified is not None:
+                    continue
+
+                db.add(
+                    OnboardingNotification(
+                        client_id=client.id,
+                        step_key=step.key,
+                        team=OnboardingTeam(step.team),
+                        message=f"{client.name} : étape « {step.label} » franchie.",
+                    )
+                )
 
         db.commit()

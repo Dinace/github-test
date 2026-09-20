@@ -380,3 +380,46 @@ class Appointment(Base):
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     client: Mapped["Client"] = relationship()
+
+
+class OnboardingTeam(str, Enum):
+    commercial = "commercial"
+    technique = "technique"
+
+
+class OnboardingNotificationStatus(str, Enum):
+    pending = "pending"
+    acknowledged = "acknowledged"
+
+
+class OnboardingNotification(Base):
+    """Notification précise envoyée à une équipe interne lors de la progression d'une étape
+    de mise en place de l'offre chez un client — extension "office manager" de l'agent
+    Planning (décision actée avec l'utilisateur : pas un agent séparé, voir MEMORY.md et
+    agents/planning/skills/README.md).
+
+    Modèle **distinct** de `Notification` ci-dessus (qui reste la notification d'anomalie
+    technique de l'agent Maintenance, périmètre et audience différents — l'équipe commerciale
+    n'a pas à voir "scan de sécurité : aucune vulnérabilité" et l'équipe Maintenance n'a pas
+    à voir "site publié"). Les créer dans la même table aurait aussi violé le cloisonnement
+    (CLAUDE.md §5) : `Notification` est possédée par l'agent Maintenance.
+    """
+
+    __tablename__ = "onboarding_notifications"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    client_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("clients.id"))
+    # Clé technique de l'étape franchie (ex. "site_published") — voir
+    # agents/planning/onboarding.py pour la liste des étapes.
+    step_key: Mapped[str] = mapped_column(String(100))
+    team: Mapped[OnboardingTeam] = mapped_column(SAEnum(OnboardingTeam, name="onboarding_team_enum"))
+    message: Mapped[str] = mapped_column(String(500))
+    status: Mapped[OnboardingNotificationStatus] = mapped_column(
+        SAEnum(OnboardingNotificationStatus, name="onboarding_notif_status_enum"),
+        default=OnboardingNotificationStatus.pending,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    acknowledged_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    client: Mapped["Client"] = relationship()

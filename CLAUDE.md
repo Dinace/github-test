@@ -107,6 +107,16 @@ table des packs et n'est pas un critère de montée en gamme.
 - Deux niveaux d'accès : staff (`OPS_API_TOKEN`, même stopgap que Maintenance) pour voir
   n'importe quel client et gérer les RDV ; client (sa propre clé API) pour son propre résumé
   et ses propres RDV. Voir `agents/planning/skills/README.md` pour le détail.
+- **"Office manager"** : suivi des étapes de mise en place de l'offre chez un client
+  (`agents/planning/onboarding.py`) et notification précise des équipes internes
+  concernées — commercial ou technique selon l'étape, jamais un flux unique mélangeant
+  tout (`GET /api/planning/notifications?team=commercial|technique`). **Décision actée
+  avec l'utilisateur : pas un agent séparé** — une extension du périmètre de Planning
+  (qui fait déjà du suivi transverse), pas un 6ᵉ agent qui aurait recoupé sa mission.
+  Chaque étape (site créé/généré/publié, première sauvegarde confirmée, première
+  publication réseaux sociaux, prospection démarrée — ces deux dernières seulement pour
+  Business/Premium, qui les incluent) est **calculée** à partir des données déjà
+  possédées par les autres agents, jamais une nouvelle source de vérité dupliquée.
 
 Chaque `skills/README.md` documente les skills/frameworks/librairies retenus pour l'agent
 concerné, avec justification, points encore à trancher, et rappel des permissions qui lui
@@ -142,7 +152,8 @@ sont propres.
   d'opération avant scalabilité maximale). À réévaluer si le volume de jobs ou le besoin de
   les distribuer sur plusieurs machines l'exige. Utilisé par les agents Réseaux sociaux
   (auto-publication), Maintenance (sauvegardes/rétention, scan de sécurité, disponibilité)
-  et Planning (rappels de RDV par WhatsApp, voir `agents/planning/skills/README.md`).
+  et Planning (rappels de RDV par WhatsApp, notifications d'étapes de mise en place de
+  l'offre — voir `agents/planning/skills/README.md`).
 - **Dashboard client** : rendu côté serveur, stack 100% Python plutôt qu'un frontend JS
   séparé.
   - **Jinja2** pour les templates (déjà utilisé par l'agent Création de site — une seule

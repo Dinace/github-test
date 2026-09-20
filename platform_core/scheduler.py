@@ -48,7 +48,10 @@ def create_scheduler() -> BackgroundScheduler:
         run_security_scans,
         run_uptime_checks,
     )
-    from agents.planning.scheduled_jobs import send_appointment_reminders
+    from agents.planning.scheduled_jobs import (
+        notify_onboarding_progress,
+        send_appointment_reminders,
+    )
     from agents.reseaux_sociaux.scheduled_jobs import publish_due_posts
 
     scheduler = BackgroundScheduler(timezone="UTC")
@@ -91,5 +94,14 @@ def create_scheduler() -> BackgroundScheduler:
         "interval",
         minutes=30,
         id="send_appointment_reminders",
+    )
+    # Suivi des étapes de mise en place de l'offre ("office manager", extension de Planning) :
+    # calculé à chaque tick à partir de l'état courant (Site/Post/Prospect/Backup), pas besoin
+    # d'un tick plus fréquent que les autres jobs de suivi.
+    scheduler.add_job(
+        _safe("notify_onboarding_progress", lambda: notify_onboarding_progress(SessionLocal)),
+        "interval",
+        minutes=30,
+        id="notify_onboarding_progress",
     )
     return scheduler

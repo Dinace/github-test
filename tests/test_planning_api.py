@@ -11,6 +11,7 @@ from app.main import app
 from platform_core.auth import create_client_with_api_key
 from platform_core.config import settings
 from platform_core.db import Base, get_db
+from platform_core.models import Site, SiteStatus, Subscription
 
 
 @pytest.fixture()
@@ -142,6 +143,74 @@ def test_client_can_view_and_confirm_own_appointment(
     confirm_resp = client.post(f"/api/planning/me/appointments/{appointment_id}/confirm", headers=client_headers)
     assert confirm_resp.status_code == 200
     assert confirm_resp.json()["status"] == "confirmed"
+
+
+def test_staff_can_view_client_onboarding_checklist(
+    db_session: Session, ops_headers: dict[str, str], client_and_headers: tuple[uuid.UUID, dict[str, str]]
+) -> None:
+    client_id, _ = client_and_headers
+    db_session.add(Site(client_id=client_id, sector="restaurant", brief={}, status=SiteStatus.draft))
+    db_session.commit()
+    client = TestClient(app)
+
+    resp = client.get(f"/api/planning/clients/{client_id}/onboarding", headers=ops_headers)
+
+    assert resp.status_code == 200
+    steps = {s["key"]: s["done"] for s in resp.json()}
+    assert steps["site_created"] is True
+    assert steps["site_published"] is False
+
+
+def test_client_can_view_own_onboarding_checklist(
+    db_session: Session, client_and_headers: tuple[uuid.UUID, dict[str, str]]
+) -> None:
+    _client_id, client_headers = client_and_headers
+    client = TestClient(app)
+
+    resp = client.get("/api/planning/me/onboarding", headers=client_headers)
+
+    assert resp.status_code == 200
+    assert any(s["key"] == "site_created" for s in resp.json())
+
+
+def test_staff_can_list_and_acknowledge_onboarding_notifications_by_team(
+    db_session: Session, ops_headers: dict[str, str], client_and_headers: tuple[uuid.UUID, dict[str, str]]
+) -> None:
+    client_id, _ = client_and_headers
+    db_session.add(Subscription(client_id=client_id, pack="business", price_amount=1000, payment_provider="orange_money"))
+    db_session.add(Site(client_id=client_id, sector="restaurant", brief={}, status=SiteStatus.published, content={"x": 1}))
+    db_session.commit()
+
+    client = TestClient(app)
+
+    from sqlalchemy.orm import sessionmaker
+
+    from agents.planning.scheduled_jobs import notify_onboarding_progress
+
+    # Appelé directement (pas via le scheduler, jamais démarré pendant les tests), avec un
+    # sessionmaker séparé sur le même moteur que db_session, pour créer les notifications à
+    # vérifier ci-dessous sans entrelacer le cycle de vie de la session de la fixture.
+    notify_onboarding_progress(sessionmaker(bind=db_session.get_bind()))
+
+    commercial_resp = client.get("/api/planning/notifications", headers=ops_headers, params={"team": "commercial"})
+    assert commercial_resp.status_code == 200
+    assert len(commercial_resp.json()) >= 1
+    notification_id = commercial_resp.json()[0]["id"]
+
+    technique_resp = client.get("/api/planning/notifications", headers=ops_headers, params={"team": "technique"})
+    assert all(n["team"] == "technique" for n in technique_resp.json())
+
+    ack_resp = client.post(
+        f"/api/planning/notifications/{notification_id}/acknowledge",
+        headers=ops_headers,
+        json={"acknowledged_by": "commercial@plateforme.example"},
+    )
+    assert ack_resp.status_code == 200
+    assert ack_resp.json()["status"] == "acknowledged"
+
+    # Une fois acquittée, elle ne doit plus apparaître dans la liste "pending".
+    after = client.get("/api/planning/notifications", headers=ops_headers, params={"team": "commercial"})
+    assert notification_id not in [n["id"] for n in after.json()]
 
 
 def test_client_cannot_confirm_another_clients_appointment(

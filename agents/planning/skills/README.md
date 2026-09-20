@@ -1,4 +1,4 @@
-# Skills — Agent Planning (suivi & rendez-vous)
+# Skills — Agent Planning (suivi, rendez-vous & mise en place de l'offre)
 
 **Statut particulier** : contrairement aux 4 agents de CLAUDE.md §2, Planning n'est **pas un
 agent vendu dans les packs** (Starter/Business/Premium, CLAUDE.md §1). C'est un outil
@@ -10,11 +10,18 @@ actée avec l'utilisateur :
   suivi commercial, support) — **pas** un module de prise de RDV grand public pour les
   clients finaux du PME (ex. réservation restaurant), qui resterait un besoin distinct non
   couvert ici.
+- **"Office manager"** (suivi des étapes de mise en place de l'offre + notification précise
+  des équipes internes concernées) : demandé initialement comme "un agent office manager"
+  séparé — **décision actée avec l'utilisateur : une extension du périmètre de Planning
+  plutôt qu'un 6ᵉ agent**, Planning faisant déjà du suivi transverse de l'activité client ;
+  créer un agent distinct aurait recoupé sa mission sans bénéfice clair. Reste, comme
+  Planning, interne et hors packs (l'audience — "les commerciaux et autres services" — est
+  l'équipe qui opère la plateforme, jamais le client).
 
 **Périmètre** : lecture seule sur les données des 4 autres agents (Site, Post, Prospect) —
 jamais d'écriture dans leur périmètre propre (CLAUDE.md §5). Écrit uniquement dans ses
-propres tables (`Appointment`) et dans le journal d'événements partagé (`ActivityEvent`,
-où chaque agent ne journalise que ses propres actions).
+propres tables (`Appointment`, `OnboardingNotification`) et dans le journal d'événements
+partagé (`ActivityEvent`, où chaque agent ne journalise que ses propres actions).
 
 ## Skills / librairies retenues
 
@@ -25,7 +32,8 @@ où chaque agent ne journalise que ses propres actions).
 | **API Claude directe** (SDK `anthropic`, modèle `claude-sonnet-5`) | Transformer un résumé structuré (compteurs) en 2-3 phrases de synthèse pour l'équipe. | Même raisonnement que les 4 autres agents : transformer des données structurées en texte est un appel unique, pas une tâche agentique ouverte — pas le Claude Agent SDK. |
 | **FastAPI (déjà en place)** | Exposer deux niveaux d'accès distincts : staff (jeton d'opération) et client (clé API). | Aucune nouvelle dépendance ; réutilise le même mécanisme d'auth que Maintenance (staff) et que Création de site/Réseaux sociaux/Prospection (client). |
 | **`agents.prospection.whatsapp` (réutilisé, pas dupliqué)** | Rappel de RDV par WhatsApp (`scheduled_jobs.py::send_appointment_reminders`). | Le module existe déjà et fonctionne (voir agents/prospection/skills/README.md) ; le réutiliser suit le même précédent que Maintenance réutilisant le client R2 de Création de site — un seul module par intégration technique, pas une copie par agent. |
-| **APScheduler** (partagé, voir `platform_core/scheduler.py`) | Déclenche `send_appointment_reminders` automatiquement (tick de 30 minutes). | Même infrastructure que Réseaux sociaux/Maintenance, pas une planification propre à Planning. |
+| **APScheduler** (partagé, voir `platform_core/scheduler.py`) | Déclenche `send_appointment_reminders` et `notify_onboarding_progress` automatiquement (tick de 30 minutes). | Même infrastructure que Réseaux sociaux/Maintenance, pas une planification propre à Planning. |
+| **Requêtes SQLAlchemy classiques, encore** (`onboarding.py`) | Calculer la progression de la mise en place de l'offre à partir de l'état courant (Site/Post/Prospect/Backup/Subscription), sans nouvelle source de vérité. | Même raisonnement que `dashboard.py` (première ligne du tableau) : c'est de la lecture agrégée, pas un besoin d'outil externe — une étape n'est jamais "vraie" par elle-même, toujours dérivée de ce que possèdent déjà les autres agents. |
 
 **Écarté pour l'instant** : un vrai outil de calendrier (Google Calendar API, Calendly...)
 pour la synchronisation du côté staff — le besoin actuel (RDV internes, volume faible) ne le
@@ -77,6 +85,39 @@ justifie pas ; à réévaluer si le volume de RDV staff augmente significativeme
   les autres tâches planifiées sans credentials). Échec d'envoi → notification staff (une
   seule par rendez-vous tant qu'elle n'est pas acquittée), même principe que
   `agents/reseaux_sociaux/scheduled_jobs.py::publish_due_posts`.
+- `onboarding.py::get_onboarding_checklist(client_id)` — "office manager" : liste ordonnée
+  des étapes de mise en place de l'offre pour ce client, **calculées** (jamais un nouvel
+  état écrit ailleurs) à partir de Site/Post/Prospect/Backup/Subscription :
+  - `site_created` / `site_content_generated` / `site_published` — toujours présentes
+    (Création de site est dans tous les packs) ;
+  - `first_backup_confirmed` — sauvegarde plateforme, pas par client (voir
+    `platform_core.models.Backup`) : franchie pour tous les clients dès qu'UNE sauvegarde
+    existe, décision cohérente avec celle déjà actée pour la cadence de sauvegarde
+    (`agents/maintenance/scheduled_jobs.py`) ;
+  - `social_media_active` / `prospection_started` — uniquement pour les packs
+    Business/Premium (Réseaux sociaux et Prospection absents du Starter, CLAUDE.md §1) :
+    inutile de notifier une étape que ce client n'a pas achetée.
+  Chaque étape porte une `team` cible (`commercial` ou `technique`).
+- `scheduled_jobs.py::notify_onboarding_progress` : tâche planifiée (tick de 30 minutes) qui
+  parcourt les clients avec un abonnement actif, calcule leur checklist, et crée **une seule**
+  `OnboardingNotification` par (client, étape) la première fois qu'elle est franchie —
+  l'existence de la notification sert elle-même de marqueur "déjà notifié" (une étape ne
+  redevient jamais non franchie).
+- `platform_core.models.OnboardingNotification` — modèle **distinct** de
+  `platform_core.models.Notification` (celle de l'agent Maintenance) : audiences et
+  périmètres différents (commercial/technique vs anomalies techniques), et les mélanger
+  aurait violé le cloisonnement (`Notification` est possédée par Maintenance).
+- Endpoints ajoutés à `app/routers/planning.py` :
+  - **Staff** : `GET /clients/{id}/onboarding` (checklist d'un client), `GET /notifications`
+    (filtrable `?team=commercial|technique` — c'est concrètement ce que "notifier les
+    commerciaux et autres services de manière précise" recouvre : chaque service ne voit
+    que ce qui le concerne), `POST /notifications/{id}/acknowledge`.
+  - **Client** : `GET /me/onboarding` (sa propre checklist).
+- Testé : checklist par pack (Starter sans les étapes Réseaux sociaux/Prospection, Business
+  avec), progression reflétée quand Site/Post/Prospect/Backup changent d'état, tâche
+  planifiée (création une seule fois par étape, routage vers la bonne équipe, ignore les
+  clients sans abonnement actif), et les endpoints via l'API (staff et client) — aucun appel
+  réseau réel dans la suite de tests.
 
 ## Bug découvert et corrigé pendant l'implémentation
 
@@ -103,11 +144,24 @@ colonne `JSON` comme un littéral JSON `"null"`, **pas** un vrai `NULL` SQL — 
   que `meta_page_id`/`whatsapp_phone_number_id` pour les autres agents).
 - Pas de compte staff individuel (même limite que `OPS_API_TOKEN` pour Maintenance) :
   `staff_contact` est un champ texte libre, pas une identité vérifiée.
+- Checklist "office manager" figée dans le code (`onboarding.py`), pas configurable par
+  l'équipe (contrairement au scoring de Prospection, qui expose des poids ajustables) —
+  à revoir si les étapes doivent souvent changer.
+- Pas de canal de notification réel (email/Slack) pour les équipes commercial/technique :
+  les `OnboardingNotification` sont surfacées uniquement via l'API
+  (`GET /api/planning/notifications`), à consulter activement — même limite que les
+  `Notification` de l'agent Maintenance.
+- Étape `first_backup_confirmed` commune à tous les clients (sauvegarde plateforme, pas par
+  client) : un nouveau client bascule instantanément sur cette étape dès qu'une sauvegarde
+  existe déjà pour la plateforme, ce qui est honnête (ses données EN font partie) mais peu
+  informatif comme signal d'onboarding individuel — à revoir si un signal plus spécifique
+  au client est nécessaire.
 
 ## Rappel des permissions
 
 - Autorisé : lire les données des 4 autres agents pour les agréger (jamais les modifier),
-  journaliser ses propres événements, gérer les rendez-vous staff/client.
+  journaliser ses propres événements, gérer les rendez-vous staff/client, notifier les
+  équipes internes de la progression de la mise en place de l'offre.
 - Interdit : modifier le code ou les données propres d'un autre agent (CLAUDE.md §5), créer
   des événements au nom d'un autre agent, utiliser une clé API en dehors de
   `config/credentials/`.
