@@ -654,3 +654,74 @@ Format d'entrée suggéré :
   un compte Fly.io est disponible — validé seulement par équivalent (install non-éditable)
   ici.
 - Devis direct BSP (WhatsApp), contact Moov Money Gabon, prix d'abonnement final — inchangé.
+
+---
+
+## 2026-09-20 — Agent Maintenance implémenté (backups, monitoring, sécurité, restauration)
+
+**Décisions techniques**
+- **Rotation grand-père/père/fils implémentée réellement** (`agents/maintenance/backup.py`,
+  fonction pure `keys_to_retain`), pas juste documentée : pour Business/Premium, dérive un
+  backup hebdomadaire ou mensuel "représentatif" (le plus récent de chaque période ISO) au-
+  delà de la fenêtre la plus fine, fidèle au tableau déjà acté dans le skills/README.md.
+  Testée avec des historiques synthétiques de plusieurs mois pour les 3 packs.
+- **Sentry** : l'app est réellement instrumentée (`sentry_sdk.init` dans `app/main.py`, pas
+  seulement documentée) — les vraies erreurs de la plateforme remonteront dans Sentry une
+  fois `SENTRY_DSN` renseigné. Décision architecturale : le seuil "≥5 fois en 1h" n'est
+  **pas réimplémenté** en Python, il vit dans une règle d'alerte configurée côté Sentry lui-
+  même (plus robuste que de le refaire nous-mêmes) ; un endpoint webhook reçoit l'alerte et
+  crée une `Notification`.
+- **Processus de restauration** implémenté avec un vrai garde-fou côté code (pas seulement
+  côté API) : `execute_restore` lève `RestoreNotConfirmedError` si le statut n'est pas
+  `confirmed`, quel que soit l'appelant — cohérent avec l'interdiction CLAUDE.md §5.
+- **Nouveaux modèles** : `Notification` (catégorie/sévérité/statut, rattachable à un client/
+  site en contexte), `Backup`, `RestoreRequest`. Migration Alembic dédiée (bruit SQLite
+  habituel nettoyé avant commit).
+- **Décision de trust boundary** : contrairement aux sites/posts (par client, API key
+  client), les opérations de Maintenance (backup, restauration, notifications) sont
+  **platform-wide** (PostgreSQL est une base partagée entre tous les clients, CLAUDE.md §3 —
+  un pg_dump couvre toute la plateforme, pas un client isolé) et relèvent du staff, pas du
+  client. Comme aucun système d'auth staff n'existe, un jeton partagé unique
+  (`OPS_API_TOKEN`, `app/auth.py::require_ops_token`) sert de verrou minimal — **stopgap
+  explicite**, documenté comme tel à 3 endroits (config, skills/README.md, CLAUDE.md) pour
+  qu'il ne soit pas confondu avec un vrai système d'auth.
+- **Faille assumée et documentée, pas cachée** : le webhook `POST /api/maintenance/webhooks/
+  sentry` n'a aucune vérification de signature — n'importe qui peut aujourd'hui y injecter
+  une fausse alerte. Choix délibéré de livrer la fonctionnalité avec cette limite clairement
+  marquée plutôt que de bloquer tout l'agent dessus, mais **à corriger avant tout déploiement
+  réel**.
+- Honnêteté sur une incertitude : le schéma JSON exact de `pip-audit --format=json` (en
+  particulier la présence d'un champ de sévérité) n'a pas été vérifié contre une exécution
+  réelle ni une doc à jour dans cette session — noté explicitement dans
+  `agents/maintenance/security_scan.py` et son skills/README.md plutôt que présenté comme
+  certain.
+- Réutilise le client R2 existant (`agents.creation_site.storage.get_r2_client`) pour les
+  sauvegardes plutôt que d'en dupliquer un — un seul bucket, mêmes credentials.
+- 57 tests au total (contre 35 avant cette session), tous passent. Packaging non-éditable
+  revérifié après ajout du nouveau module (`agents.maintenance`) : toujours correct, aucun
+  bug de packaging supplémentaire introduit.
+
+**État d'avancement par agent**
+- Maintenance : logique métier complète et testée (rétention, seuils, restauration,
+  sécurité), exposée via API avec un stopgap d'auth staff. Restent : vraie tâche planifiée
+  (rien ne déclenche automatiquement backup/scan/monitoring pour l'instant, appels manuels),
+  vérification de signature du webhook Sentry, vraie auth staff, connectivité réelle jamais
+  vérifiée (Postgres/R2/UptimeRobot/Sentry tous simulés dans les tests).
+- Prospection : conception seulement, aucun code — dernier agent restant.
+
+**Problèmes rencontrés / solutions**
+- Aucun bug bloquant cette fois (contrairement à la session précédente) — la vérification
+  systématique du packaging non-éditable après chaque nouvel agent a payé : rien à corriger.
+
+**Questions ouvertes**
+- Construire les vraies tâches planifiées (backup, scan sécurité, vérification uptime par
+  site) — actuellement des endpoints à appel manuel.
+- Vérifier la signature des webhooks Sentry avant tout déploiement réel.
+- Concevoir un vrai système d'auth staff (remplacer `OPS_API_TOKEN`).
+- Ajouter un `uptime_monitor_id` par `Site` pour relier vérification et site concerné.
+- Scan de sécurité des sites clients eux-mêmes (en-têtes HTTP), pas seulement des
+  dépendances Python de la plateforme.
+- Vérifier la connectivité réelle (pg_dump/psql, R2, UptimeRobot, Sentry) dès que
+  l'environnement le permet.
+- Implémenter Prospection — dernier agent de la plateforme.
+- Devis direct BSP (WhatsApp), contact Moov Money Gabon, prix d'abonnement final — inchangé.

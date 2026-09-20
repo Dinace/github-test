@@ -56,6 +56,58 @@ communiquer clairement au client dans les conditions d'utilisation du pack.
 4. L'agent exécute la restauration seulement après cette confirmation, puis notifie le
    client concerné.
 
+## Implémentation actuelle
+
+- `backup.py` : `create_backup()` (pg_dump via subprocess, injectable), `upload_backup`/
+  `list_backup_keys` (Cloudflare R2, réutilise `agents.creation_site.storage.get_r2_client`),
+  et surtout `keys_to_retain(pack, keys, now)` — **implémentation réelle** de la rotation
+  grand-père/père/fils du tableau ci-dessus (fonction pure, sans I/O, testée avec des
+  historiques synthétiques de plusieurs mois). `apply_retention` supprime ce qui sort de la
+  fenêtre calculée.
+- `uptime.py` : `check_uptime` (API UptimeRobot, client HTTP injectable) et
+  `should_notify_downtime` (seuil des 15 minutes, fonction pure).
+- `security_scan.py` : `run_pip_audit` (sous-processus injectable, parsing best-effort —
+  schéma JSON de `pip-audit` non revérifié contre la doc à jour dans cette session, voir
+  note dans le fichier) et `classify_urgency` (répartition immédiat/résumé hebdo).
+- `restore.py` : `propose_restore` / `confirm_restore` / `execute_restore` — implémente
+  strictement le processus à 4 étapes ci-dessus ; `execute_restore` lève
+  `RestoreNotConfirmedError` si appelé sur une demande qui n'est pas au statut `confirmed`,
+  quelle que soit la façon dont il est invoqué (pas seulement une vérification côté API).
+- **Sentry** : l'app elle-même est instrumentée (`app/main.py`, `sentry_sdk.init`), donc les
+  erreurs réelles de la plateforme remontent dans Sentry. Le seuil "≥5 fois en 1h" **vit
+  dans une règle d'alerte Sentry** (pas réimplémenté ici) ; `POST /api/maintenance/webhooks/
+  sentry` reçoit cette alerte et crée une `Notification`. **Vérification de signature du
+  webhook non implémentée** — voir points ouverts, c'est une vraie faille à corriger avant
+  un déploiement réel (n'importe qui pourrait injecter de fausses alertes).
+- Modèles ajoutés : `Notification` (catégorie/sévérité/statut), `Backup`, `RestoreRequest`.
+- Endpoints (`app/routers/maintenance.py`), protégés par un jeton d'opération partagé —
+  **stopgap explicite**, pas un vrai système d'auth staff (voir `app/auth.py::
+  require_ops_token`) : lister/acquitter les notifications, déclencher une sauvegarde,
+  proposer/confirmer/exécuter une restauration. Le webhook Sentry n'est volontairement pas
+  derrière ce jeton (Sentry appelle directement, sans le connaître).
+- Testé : rotation de rétention (les 3 packs, avec des dizaines de sauvegardes synthétiques
+  étalées sur plusieurs mois), seuil de disponibilité, parsing pip-audit, le refus
+  d'exécuter une restauration non confirmée (le garde-fou central), et le flux complet via
+  l'API — aucun appel réseau réel (Postgres, R2, UptimeRobot, Sentry tous simulés).
+
+## Points ouverts (pas encore fait, explicitement)
+
+- **Vraie tâche planifiée** (Celery beat/APScheduler) qui déclenche sauvegardes, scans de
+  sécurité et vérifications de disponibilité automatiquement — pour l'instant, tout se
+  déclenche via un appel manuel à l'API (`POST /api/maintenance/backups`, etc.), même
+  limite que la planification des publications de l'agent Réseaux sociaux.
+- **Vérification de signature du webhook Sentry** — actuellement n'importe qui peut appeler
+  `POST /api/maintenance/webhooks/sentry` et injecter une fausse alerte.
+- **Vraie authentification staff** — le jeton d'opération partagé (`OPS_API_TOKEN`) n'est
+  qu'un verrou minimal, pas un système avec comptes individuels/rôles/audit par utilisateur.
+- Vérification de connectivité réelle : `pg_dump`/`psql` (Postgres), R2 et UptimeRobot n'ont
+  jamais été exécutés contre de vrais services dans cette session (credentials non
+  disponibles) — seule la logique est testée avec des doublures.
+- Détection de "site indisponible" pas encore reliée à un monitor UptimeRobot précis par
+  site (`Site` n'a pas encore de champ `uptime_monitor_id`).
+- Scan de sécurité des sites clients générés eux-mêmes (en-têtes HTTP) — seul le scan des
+  dépendances Python de la plateforme (`pip-audit`) est implémenté pour l'instant.
+
 ## Rappel des permissions (voir CLAUDE.md §5)
 
 - Autorisé : surveiller, sauvegarder, détecter des anomalies, notifier un humain.

@@ -16,12 +16,17 @@ dependencies = [
     "anthropic>=0.40",
     "boto3>=1.34",
     "httpx>=0.27",
+    "sentry-sdk[fastapi]>=2.0",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
     "ruff>=0.6",
+    # Outil CLI invoqué en sous-processus par agents/maintenance/security_scan.py (jamais
+    # importé en Python) — à inclure aussi dans l'environnement de production une fois la
+    # tâche planifiée de scan réel construite (pas encore le cas, voir skills/README.md).
+    "pip-audit>=2.7",
 ]
 
 [build-system]

@@ -40,6 +40,7 @@ pays, pas figé pour toute la plateforme.
 | `DATABASE_URL` | PostgreSQL managé (Fly Postgres) | Plateforme (tous les agents, via la couche d'accès aux données) | Connexion à la base de données. |
 | `SENTRY_DSN` | Sentry (ou équivalent) | Agent Maintenance | Détection et remontée d'anomalies/bugs. |
 | `UPTIME_MONITOR_TOKEN` | Service de monitoring (ex. UptimeRobot) | Agent Maintenance | Surveillance de disponibilité des sites clients. |
+| `OPS_API_TOKEN` | Interne (pas un service tiers) | Agent Maintenance (`app/routers/maintenance.py`) | Jeton partagé pour les endpoints internes staff (notifications, backups, restauration). **Stopgap explicite** : pas un vrai système d'auth staff (comptes individuels, rôles) — voir `platform_core/config.py`. |
 | `FLY_API_TOKEN` | Fly.io | Infrastructure (déploiement/CI-CD) | Déploiement de l'app et de la base ; non consommée par un agent métier à l'exécution. |
 | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare | Agent Création de site, Agent Maintenance | Identifiant de compte Cloudflare (R2 + CDN). |
 | `CLOUDFLARE_R2_ACCESS_KEY_ID` / `CLOUDFLARE_R2_SECRET_ACCESS_KEY` | Cloudflare R2 | Agent Création de site, Agent Maintenance | Stockage/diffusion des sites clients générés et des sauvegardes. |

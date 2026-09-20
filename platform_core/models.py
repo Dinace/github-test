@@ -106,6 +106,91 @@ class Site(Base):
     client: Mapped["Client"] = relationship()
 
 
+class NotificationCategory(str, Enum):
+    site_down = "site_down"
+    backup_failure = "backup_failure"
+    security_finding = "security_finding"
+    error_spike = "error_spike"
+
+
+class NotificationSeverity(str, Enum):
+    info = "info"
+    warning = "warning"
+    critical = "critical"
+
+
+class NotificationStatus(str, Enum):
+    pending = "pending"
+    acknowledged = "acknowledged"
+
+
+class Notification(Base):
+    """Anomalie détectée par l'agent Maintenance nécessitant l'attention d'un humain
+    (agents/maintenance/skills/README.md, "seuils de notification humaine").
+
+    Rattachée à un client/site quand pertinent (ex. site indisponible), mais gérée par le
+    staff, pas par le client lui-même — pas d'authentification par clé API client ici,
+    voir app/routers/maintenance.py.
+    """
+
+    __tablename__ = "notifications"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    category: Mapped[NotificationCategory] = mapped_column(SAEnum(NotificationCategory, name="notif_category_enum"))
+    severity: Mapped[NotificationSeverity] = mapped_column(SAEnum(NotificationSeverity, name="notif_severity_enum"))
+    message: Mapped[str] = mapped_column(String(1000))
+    client_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("clients.id"), nullable=True)
+    site_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("sites.id"), nullable=True)
+    status: Mapped[NotificationStatus] = mapped_column(
+        SAEnum(NotificationStatus, name="notif_status_enum"), default=NotificationStatus.pending
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    acknowledged_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+
+class Backup(Base):
+    """Sauvegarde de la base de données (agents/maintenance/backup.py).
+
+    Platform-wide, pas par client : PostgreSQL est une base partagée entre tous les clients
+    (CLAUDE.md §3), donc un pg_dump couvre toute la plateforme, pas un client isolé.
+    """
+
+    __tablename__ = "backups"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    r2_key: Mapped[str] = mapped_column(String(255), unique=True)
+    size_bytes: Mapped[int] = mapped_column()
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+
+class RestoreStatus(str, Enum):
+    proposed = "proposed"
+    confirmed = "confirmed"
+    executed = "executed"
+    rejected = "rejected"
+
+
+class RestoreRequest(Base):
+    """Demande de restauration : propose -> confirmation humaine -> exécution.
+
+    Jamais exécutée automatiquement (CLAUDE.md §5, agents/maintenance/skills/README.md,
+    "processus de restauration") — agents/maintenance/restore.py refuse execute_restore tant
+    que status != confirmed.
+    """
+
+    __tablename__ = "restore_requests"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    backup_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("backups.id"))
+    reason: Mapped[str] = mapped_column(String(1000))
+    status: Mapped[RestoreStatus] = mapped_column(SAEnum(RestoreStatus, name="restore_status_enum"), default=RestoreStatus.proposed)
+    requested_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    confirmed_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    executed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
 class PostStatus(str, Enum):
     draft = "draft"
     pending_validation = "pending_validation"

@@ -19,5 +19,15 @@ class Settings(BaseSettings):
     cloudflare_r2_secret_access_key: str = ""
     cloudflare_r2_bucket: str = ""
 
+    # Maintenance (voir config/credentials/README.md).
+    sentry_dsn: str = ""
+    uptime_monitor_token: str = ""
+    # Jeton partagé pour les endpoints internes de Maintenance (app/routers/maintenance.py).
+    # STOPGAP explicite : ce n'est pas un vrai système d'auth staff (comptes individuels,
+    # rôles, audit par utilisateur) — un verrou minimal en attendant que ce système soit
+    # conçu. Vide par défaut : les endpoints concernés répondent alors 503 plutôt que de
+    # s'ouvrir en clair si la variable n'est pas configurée.
+    ops_api_token: str = ""
+
 
 settings = Settings()

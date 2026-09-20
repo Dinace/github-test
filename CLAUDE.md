@@ -84,9 +84,9 @@ Noms de dossiers en snake_case (et non kebab-case comme dans les premières vers
 document) : ce sont aussi des packages Python valides, importables directement (ex.
 `agents.creation_site`).
 
-`agents/creation_site/` et `agents/reseaux_sociaux/` contiennent désormais aussi du code
-(voir leurs `skills/README.md`, section "Implémentation actuelle"). Maintenance et
-Prospection n'ont encore que leur `skills/README.md` (conception, pas de code).
+`agents/creation_site/`, `agents/reseaux_sociaux/` et `agents/maintenance/` contiennent
+désormais aussi du code (voir leurs `skills/README.md`, section "Implémentation actuelle").
+Prospection n'a encore que son `skills/README.md` (conception, pas de code).
 
 Chaque `skills/README.md` documente les skills/frameworks/librairies retenus pour l'agent
 concerné, avec justification, points encore à trancher, et rappel des permissions qui lui
@@ -204,9 +204,10 @@ intervient sur le code du projet lui-même.
 
 Scaffolding applicatif créé : package partagé `platform_core/` (config, accès DB, modèles),
 app FastAPI + dashboard dans `app/`, migrations Alembic dans `migrations/`. Agents
-implémentés : Création de site et Réseaux sociaux (`agents/creation_site/`,
-`agents/reseaux_sociaux/`, voir leurs `skills/README.md`). Maintenance et Prospection n'ont
-encore que leur conception (`agents/<nom-agent>/skills/README.md`), pas de code.
+implémentés : Création de site, Réseaux sociaux et Maintenance (`agents/creation_site/`,
+`agents/reseaux_sociaux/`, `agents/maintenance/`, voir leurs `skills/README.md`).
+Prospection n'a encore que sa conception (`agents/prospection/skills/README.md`), pas de
+code.
 
 1. Copier `config/credentials/.env.example` vers `config/credentials/.env` et renseigner au
    minimum `DATABASE_URL` (PostgreSQL local ou distant). Pour utiliser réellement l'agent
@@ -217,7 +218,10 @@ encore que leur conception (`agents/<nom-agent>/skills/README.md`), pas de code.
    `POST /api/sites/{id}/generate` ou `POST /api/posts/{id}/generate`). Pour publier
    réellement via l'agent Réseaux sociaux, `Client.meta_page_id`/`meta_page_access_token`
    doivent être renseignés manuellement en base (pas de flux OAuth de connexion pour
-   l'instant — voir `agents/reseaux_sociaux/skills/README.md`).
+   l'instant — voir `agents/reseaux_sociaux/skills/README.md`). Pour appeler les endpoints
+   internes de l'agent Maintenance (`/api/maintenance/*`), renseigner `OPS_API_TOKEN` —
+   stopgap explicite, pas un vrai système d'auth staff (voir
+   `agents/maintenance/skills/README.md`).
 2. Installer les dépendances (Python ≥ 3.12) : `pip install -e ".[dev]"`
 3. Appliquer les migrations : `alembic upgrade head`
 4. Lancer l'app : `uvicorn app.main:app --reload`, puis ouvrir `http://localhost:8000`
