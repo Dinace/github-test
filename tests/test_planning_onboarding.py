@@ -86,6 +86,27 @@ def test_business_pack_checklist_includes_social_and_prospection_steps(
     assert steps["social_media_active"].done is False
     assert "prospection_started" in steps
     assert steps["prospection_started"].done is False
+    assert "meta_page_connected" in steps
+    assert steps["meta_page_connected"].done is False
+    assert "whatsapp_connected" in steps
+    assert steps["whatsapp_connected"].done is False
+
+
+def test_business_pack_checklist_marks_network_access_connected(db_session: Session, client_id: uuid.UUID) -> None:
+    _subscribe(db_session, client_id, Pack.business)
+
+    from agents.planning.network_access import NetworkAccessUpdate, set_network_access
+
+    set_network_access(
+        client_id,
+        NetworkAccessUpdate(meta_page_id="123456", meta_page_access_token="secret-token"),
+        db=db_session,
+    )
+
+    steps = {step.key: step.done for step in get_onboarding_checklist(client_id, db=db_session)}
+
+    assert steps["meta_page_connected"] is True
+    assert steps["whatsapp_connected"] is False
 
 
 def test_business_pack_checklist_marks_social_and_prospection_done(db_session: Session, client_id: uuid.UUID) -> None:

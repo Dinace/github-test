@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from platform_core.models import (
     Backup,
+    Client,
     Pack,
     Post,
     PostStatus,
@@ -78,6 +79,31 @@ def get_onboarding_checklist(client_id: uuid.UUID, *, db: Session) -> list[Onboa
     )
 
     if pack in (Pack.business, Pack.premium):
+        client = db.get(Client, client_id)
+
+        # Accès collectés via POST /api/planning/clients/{id}/network-access (agents/
+        # planning/network_access.py) — précèdent logiquement leur usage effectif
+        # (social_media_active/prospection_started ci-dessous), classés "commercial" comme
+        # les autres étapes de progression de la relation client (c'est le commercial qui va
+        # chercher ces accès auprès du client, pas une tâche technique invisible comme
+        # first_backup_confirmed).
+        steps.append(
+            OnboardingStep(
+                key="meta_page_connected",
+                label="Accès Page Meta récupéré",
+                done=bool(client and client.meta_page_id and client.meta_page_access_token),
+                team="commercial",
+            )
+        )
+        steps.append(
+            OnboardingStep(
+                key="whatsapp_connected",
+                label="Accès WhatsApp Business récupéré",
+                done=bool(client and client.whatsapp_phone_number_id and client.whatsapp_access_token),
+                team="commercial",
+            )
+        )
+
         first_post_published = (
             db.query(Post).filter(Post.client_id == client_id, Post.status == PostStatus.published).first() is not None
         )

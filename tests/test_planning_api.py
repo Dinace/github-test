@@ -161,6 +161,68 @@ def test_staff_can_view_client_onboarding_checklist(
     assert steps["site_published"] is False
 
 
+def test_staff_can_view_and_update_client_project_info(
+    db_session: Session, ops_headers: dict[str, str], client_and_headers: tuple[uuid.UUID, dict[str, str]]
+) -> None:
+    client_id, _ = client_and_headers
+    client = TestClient(app)
+
+    info_resp = client.get(f"/api/planning/clients/{client_id}/project-info", headers=ops_headers)
+    assert info_resp.status_code == 200
+    assert info_resp.json()["business_name"] == "Chez Awa"
+    assert info_resp.json()["meta_connected"] is False
+    assert info_resp.json()["project_notes"] is None
+
+    notes_resp = client.put(
+        f"/api/planning/clients/{client_id}/notes",
+        headers=ops_headers,
+        json={"notes": "Préfère être recontacté après 17h."},
+    )
+    assert notes_resp.status_code == 200
+    assert notes_resp.json()["project_notes"] == "Préfère être recontacté après 17h."
+
+
+def test_staff_can_set_client_network_access_without_leaking_secrets_back(
+    db_session: Session, ops_headers: dict[str, str], client_and_headers: tuple[uuid.UUID, dict[str, str]]
+) -> None:
+    client_id, _ = client_and_headers
+    client = TestClient(app)
+
+    resp = client.put(
+        f"/api/planning/clients/{client_id}/network-access",
+        headers=ops_headers,
+        json={"meta_page_id": "123456", "meta_page_access_token": "super-secret-token"},
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["meta_connected"] is True
+    assert body["whatsapp_connected"] is False
+    # La réponse ne doit jamais contenir la valeur du token soumis, seulement l'indicateur.
+    assert "super-secret-token" not in resp.text
+    assert "meta_page_access_token" not in body
+
+    # La checklist "office manager" reflète bien le nouvel accès.
+    onboarding_resp = client.get(f"/api/planning/clients/{client_id}/onboarding", headers=ops_headers)
+    steps = {s["key"]: s["done"] for s in onboarding_resp.json()}
+    assert "meta_page_connected" not in steps  # Starter par défaut, pas de pack Business/Premium
+
+
+def test_network_access_endpoint_requires_ops_token(
+    db_session: Session, monkeypatch: pytest.MonkeyPatch, client_and_headers: tuple[uuid.UUID, dict[str, str]]
+) -> None:
+    monkeypatch.setattr(settings, "ops_api_token", "test-ops-token")
+    client_id, _ = client_and_headers
+    client = TestClient(app)
+
+    resp = client.put(
+        f"/api/planning/clients/{client_id}/network-access",
+        json={"meta_page_access_token": "secret"},
+    )
+
+    assert resp.status_code == 401
+
+
 def test_client_can_view_own_onboarding_checklist(
     db_session: Session, client_and_headers: tuple[uuid.UUID, dict[str, str]]
 ) -> None:

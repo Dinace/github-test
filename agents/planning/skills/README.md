@@ -16,7 +16,12 @@ actée avec l'utilisateur :
   plutôt qu'un 6ᵉ agent**, Planning faisant déjà du suivi transverse de l'activité client ;
   créer un agent distinct aurait recoupé sa mission sans bénéfice clair. Reste, comme
   Planning, interne et hors packs (l'audience — "les commerciaux et autres services" — est
-  l'équipe qui opère la plateforme, jamais le client).
+  l'équipe qui opère la plateforme, jamais le client). Inclut la **collecte sécurisée des
+  accès réseaux** du client (Meta, WhatsApp Business) et une **vue agrégée des informations
+  utiles au projet** — deux points précisés avec l'utilisateur : les "accès réseaux"
+  désignent les identifiants déjà modélisés (pas un nouveau périmètre de types de credential
+  à inventer), et les "infos projet" sont l'agrégation de l'existant plus une note libre,
+  pas une nouvelle structure de données par catégorie.
 
 **Périmètre** : lecture seule sur les données des 4 autres agents (Site, Post, Prospect) —
 jamais d'écriture dans leur périmètre propre (CLAUDE.md §5). Écrit uniquement dans ses
@@ -34,6 +39,7 @@ partagé (`ActivityEvent`, où chaque agent ne journalise que ses propres action
 | **`agents.prospection.whatsapp` (réutilisé, pas dupliqué)** | Rappel de RDV par WhatsApp (`scheduled_jobs.py::send_appointment_reminders`). | Le module existe déjà et fonctionne (voir agents/prospection/skills/README.md) ; le réutiliser suit le même précédent que Maintenance réutilisant le client R2 de Création de site — un seul module par intégration technique, pas une copie par agent. |
 | **APScheduler** (partagé, voir `platform_core/scheduler.py`) | Déclenche `send_appointment_reminders` et `notify_onboarding_progress` automatiquement (tick de 30 minutes). | Même infrastructure que Réseaux sociaux/Maintenance, pas une planification propre à Planning. |
 | **Requêtes SQLAlchemy classiques, encore** (`onboarding.py`) | Calculer la progression de la mise en place de l'offre à partir de l'état courant (Site/Post/Prospect/Backup/Subscription), sans nouvelle source de vérité. | Même raisonnement que `dashboard.py` (première ligne du tableau) : c'est de la lecture agrégée, pas un besoin d'outil externe — une étape n'est jamais "vraie" par elle-même, toujours dérivée de ce que possèdent déjà les autres agents. |
+| **`EncryptedString` (déjà en place, `platform_core/encryption.py`)** | Chiffrement au repos des accès réseaux collectés (`network_access.py`). | Réutilise le mécanisme déjà retenu pour `Client.meta_page_access_token`/`whatsapp_access_token` (lot sécurité d'une session précédente) — ces mêmes colonnes, pas une nouvelle table ni un nouveau mécanisme de chiffrement. |
 
 **Écarté pour l'instant** : un vrai outil de calendrier (Google Calendar API, Calendly...)
 pour la synchronisation du côté staff — le besoin actuel (RDV internes, volume faible) ne le
@@ -118,6 +124,32 @@ justifie pas ; à réévaluer si le volume de RDV staff augmente significativeme
   planifiée (création une seule fois par étape, routage vers la bonne équipe, ignore les
   clients sans abonnement actif), et les endpoints via l'API (staff et client) — aucun appel
   réseau réel dans la suite de tests.
+- `network_access.py::set_network_access` / `get_network_access_status` — collecte
+  sécurisée des accès réseaux du client : écrit dans les champs déjà existants sur
+  `Client` (`meta_page_id`/`meta_page_access_token`, `whatsapp_phone_number_id`/
+  `whatsapp_access_token`, chiffrés au repos via `EncryptedString`), jusqu'ici renseignés
+  uniquement à la main en base faute de point de collecte applicatif. **Write-only par
+  conception** : `NetworkAccessStatus` (la seule valeur jamais retournée) ne contient que
+  des booléens `meta_connected`/`whatsapp_connected`, jamais la valeur en clair d'un token
+  — même principe que `Client.api_key_hash` (`platform_core/auth.py`), un secret soumis ne
+  redevient jamais lisible via l'API. Mise à jour partielle : ne fournir que le champ à
+  changer (ex. rotation d'un seul token) n'efface pas les autres. Écrire dans `Client`
+  (modèle **partagé**, pas "possédé" par Réseaux sociaux ou Prospection) reste cohérent
+  avec le cloisonnement (CLAUDE.md §5).
+- `project_info.py::get_project_info` / `update_project_notes` — vue agrégée des
+  informations utiles au projet : regroupe ce qui existe déjà (nom/secteur/`Client`,
+  description du brief le plus récent de `Site`, ton de marque, contact, statut des accès
+  réseaux ci-dessus) plutôt que de dupliquer une nouvelle source de vérité, plus
+  `Client.project_notes` (note libre, propre à ce module, jamais montrée au client).
+- Endpoints staff supplémentaires : `GET /clients/{id}/project-info`,
+  `PUT /clients/{id}/notes`, `PUT /clients/{id}/network-access` (write-only, voir
+  ci-dessus — testé explicitement qu'aucune réponse ne contient jamais la valeur d'un
+  token soumis).
+- Testé (accès réseaux/infos projet) : statut déconnecté par défaut, connexion reflétée
+  après soumission, mise à jour partielle sans effacer les autres champs, chiffrement au
+  repos (valeur brute en base différente du texte soumis), agrégation correcte avec/sans
+  site existant, note libre persistée, et les 3 endpoints via l'API — y compris une
+  assertion explicite qu'un token soumis n'apparaît jamais dans la réponse HTTP.
 
 ## Bug découvert et corrigé pendant l'implémentation
 
@@ -156,12 +188,20 @@ colonne `JSON` comme un littéral JSON `"null"`, **pas** un vrai `NULL` SQL — 
   existe déjà pour la plateforme, ce qui est honnête (ses données EN font partie) mais peu
   informatif comme signal d'onboarding individuel — à revoir si un signal plus spécifique
   au client est nécessaire.
+- Collecte des accès réseaux limitée à Meta/WhatsApp (les seuls déjà modélisés sur
+  `Client`, décision actée avec l'utilisateur) — pas d'hébergement/domaine ni d'autres
+  réseaux sociaux, ce qui nécessiterait une structure de stockage générique (type de
+  credential + valeur chiffrée) non construite ici.
+- `PUT /clients/{id}/network-access` ne vérifie pas la validité du token soumis (ex. appel
+  test à l'API Meta/WhatsApp) — un token expiré ou mal copié n'est détecté qu'au premier
+  usage réel par Réseaux sociaux/Prospection, pas à la soumission.
 
 ## Rappel des permissions
 
 - Autorisé : lire les données des 4 autres agents pour les agréger (jamais les modifier),
   journaliser ses propres événements, gérer les rendez-vous staff/client, notifier les
-  équipes internes de la progression de la mise en place de l'offre.
+  équipes internes de la progression de la mise en place de l'offre, collecter et stocker
+  de façon chiffrée les accès réseaux du client dans les champs partagés de `Client`.
 - Interdit : modifier le code ou les données propres d'un autre agent (CLAUDE.md §5), créer
   des événements au nom d'un autre agent, utiliser une clé API en dehors de
   `config/credentials/`.

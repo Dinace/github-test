@@ -113,10 +113,15 @@ table des packs et n'est pas un critère de montée en gamme.
   tout (`GET /api/planning/notifications?team=commercial|technique`). **Décision actée
   avec l'utilisateur : pas un agent séparé** — une extension du périmètre de Planning
   (qui fait déjà du suivi transverse), pas un 6ᵉ agent qui aurait recoupé sa mission.
-  Chaque étape (site créé/généré/publié, première sauvegarde confirmée, première
-  publication réseaux sociaux, prospection démarrée — ces deux dernières seulement pour
-  Business/Premium, qui les incluent) est **calculée** à partir des données déjà
-  possédées par les autres agents, jamais une nouvelle source de vérité dupliquée.
+  Chaque étape (site créé/généré/publié, première sauvegarde confirmée, accès Meta/
+  WhatsApp récupérés, première publication réseaux sociaux, prospection démarrée — ces
+  quatre dernières seulement pour Business/Premium, qui incluent ces agents) est
+  **calculée** à partir des données déjà possédées par les autres agents, jamais une
+  nouvelle source de vérité dupliquée. Inclut aussi la **collecte sécurisée des accès
+  réseaux** du client (`PUT /api/planning/clients/{id}/network-access`, write-only —
+  jamais de valeur en clair retournée par l'API) et une **vue agrégée des informations
+  projet** (`GET .../project-info`) : les identifiants déjà modélisés (Meta, WhatsApp),
+  pas un nouveau périmètre de types de credential.
 
 Chaque `skills/README.md` documente les skills/frameworks/librairies retenus pour l'agent
 concerné, avec justification, points encore à trancher, et rappel des permissions qui lui

@@ -91,6 +91,11 @@ class Client(Base):
     # (settings.platform_whatsapp_*), pas celui du client. Pas de flux de saisie dédié pour
     # l'instant : renseigné manuellement en base, comme les autres champs de contact.
     contact_phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    # Note libre côté staff (agent Planning, "office manager") — infos utiles au projet non
+    # capturées ailleurs (ex. contrainte particulière évoquée au téléphone, préférence de
+    # contact...). Jamais montré au client, jamais structuré : un vrai besoin récurrent
+    # identifié ici mériterait un champ dédié plutôt que de rester dans ce texte libre.
+    project_notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
     subscription: Mapped["Subscription | None"] = relationship(back_populates="client", uselist=False)

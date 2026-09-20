@@ -1261,3 +1261,60 @@ l'arborescence.
 - Pas de canal de notification réel (email/Slack), uniquement surfacé via l'API — à
   consulter activement, même limite que les `Notification` de Maintenance.
 - Toutes les autres questions ouvertes des entrées précédentes restent valables.
+
+## 2026-09-20 — Office manager : collecte sécurisée des accès réseaux + vue infos projet
+
+**Demande utilisateur** (suite de l'entrée précédente) : "Il récupérera les accès réseaux
+des clients de manière sécurisé et toutes les infos utiles pour le projet."
+
+**Décisions clarifiées avant implémentation** (2 questions posées via AskUserQuestion, le
+terme "accès réseaux" pouvant recouvrir des choses très différentes et touchant au
+stockage de credentials — sujet sensible à ne pas deviner) :
+1. "Accès réseaux" = les identifiants **déjà modélisés** sur `Client` (Meta pour Réseaux
+   sociaux, WhatsApp Business pour Prospection) — pas un nouveau périmètre de types de
+   credential (hébergement, domaine, autres réseaux...) qui aurait exigé une structure de
+   stockage générique.
+2. "Infos utiles pour le projet" = agréger l'existant (brief du site, ton de marque,
+   contact) dans une vue unique, plus une note libre — pas une nouvelle structure de
+   données par catégorie (logo, charte graphique...).
+
+**Implémentation**
+- `agents/planning/network_access.py::set_network_access`/`get_network_access_status` —
+  écrit dans les champs déjà existants sur `Client` (`meta_page_id`/
+  `meta_page_access_token`, `whatsapp_phone_number_id`/`whatsapp_access_token`, chiffrés au
+  repos via `EncryptedString` depuis un lot précédent), jusqu'ici renseignés uniquement à
+  la main en base faute de point de collecte applicatif — Planning en devient le point de
+  collecte officiel. Mise à jour partielle (un champ omis n'efface pas les autres).
+  **Sécurité, "de manière sécurisée"** : `NetworkAccessStatus`, la seule valeur jamais
+  retournée par ces fonctions ou par l'endpoint, ne contient que des booléens
+  `meta_connected`/`whatsapp_connected` — écrit dans l'API (write-only), jamais relu en
+  clair, même principe que `Client.api_key_hash` (`platform_core/auth.py`). Écrire dans
+  `Client` (modèle partagé, pas "possédé" par Réseaux sociaux ou Prospection) reste
+  cohérent avec le cloisonnement (CLAUDE.md §5).
+- `agents/planning/project_info.py::get_project_info`/`update_project_notes` — agrège
+  nom/secteur/contact/ton de marque (`Client`), description du brief du site le plus
+  récent, et le statut des accès réseaux ci-dessus ; plus un nouveau champ
+  `Client.project_notes` (note libre, propre à Planning, jamais montrée au client).
+- Deux nouvelles étapes dans la checklist "office manager" (`onboarding.py`) :
+  `meta_page_connected`/`whatsapp_connected` (Business/Premium uniquement, équipe
+  `commercial`) — la collecte des accès précède logiquement leur usage
+  (`social_media_active`/`prospection_started`, déjà présentes).
+- Endpoints staff : `GET /clients/{id}/project-info`, `PUT /clients/{id}/notes`,
+  `PUT /clients/{id}/network-access`.
+- Migration `b2cb616c50fe` (`clients.project_notes`), vérifiée dans les deux sens.
+- Testé, avec une attention particulière à la sécurité : statut déconnecté par défaut,
+  connexion reflétée après soumission, chiffrement au repos vérifié (valeur brute en base
+  différente du texte soumis), mise à jour partielle sans effacer les autres champs,
+  agrégation avec/sans site existant, note libre persistée — et une assertion API
+  explicite qu'un token soumis n'apparaît **jamais** dans le corps de la réponse HTTP.
+- 168 tests au total (contre 154 avant ce lot), tous passent. Packaging non-éditable
+  revérifié.
+
+**Questions ouvertes restantes**
+- Collecte limitée à Meta/WhatsApp (déjà modélisés) — pas d'hébergement/domaine ni
+  d'autres réseaux sociaux, nécessiterait une structure de stockage générique non
+  construite ici.
+- Aucune vérification de validité du token soumis (ex. appel test à l'API) — un token
+  expiré ou mal copié n'est détecté qu'au premier usage réel par Réseaux sociaux/
+  Prospection.
+- Toutes les autres questions ouvertes des entrées précédentes restent valables.

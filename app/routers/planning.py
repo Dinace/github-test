@@ -6,8 +6,11 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from agents.planning import appointments as appointments_module
+from agents.planning import network_access as network_access_module
+from agents.planning import project_info as project_info_module
 from agents.planning.dashboard import get_client_activity_summary
 from agents.planning.digest import generate_digest
+from agents.planning.network_access import NetworkAccessUpdate
 from agents.planning.onboarding import get_onboarding_checklist
 from agents.planning.pipeline import get_prospect_pipeline
 from app.auth import get_current_client, require_ops_token
@@ -41,6 +44,10 @@ class CompleteAppointmentRequest(BaseModel):
 
 class AcknowledgeOnboardingNotificationRequest(BaseModel):
     acknowledged_by: str
+
+
+class UpdateProjectNotesRequest(BaseModel):
+    notes: str
 
 
 def _serialize_appointment(appointment: Appointment) -> dict:
@@ -85,6 +92,34 @@ def staff_get_client_digest(client_id: uuid.UUID, db: Session = Depends(get_db))
 @staff_router.get("/clients/{client_id}/onboarding")
 def staff_get_client_onboarding(client_id: uuid.UUID, db: Session = Depends(get_db)) -> list[dict]:
     return [step.model_dump() for step in get_onboarding_checklist(client_id, db=db)]
+
+
+@staff_router.get("/clients/{client_id}/project-info")
+def staff_get_client_project_info(client_id: uuid.UUID, db: Session = Depends(get_db)) -> dict:
+    try:
+        return project_info_module.get_project_info(client_id, db=db).model_dump(mode="json")
+    except project_info_module.ClientNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@staff_router.put("/clients/{client_id}/notes")
+def staff_update_client_notes(client_id: uuid.UUID, payload: UpdateProjectNotesRequest, db: Session = Depends(get_db)) -> dict:
+    try:
+        return project_info_module.update_project_notes(client_id, payload.notes, db=db).model_dump(mode="json")
+    except project_info_module.ClientNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@staff_router.put("/clients/{client_id}/network-access")
+def staff_set_client_network_access(client_id: uuid.UUID, payload: NetworkAccessUpdate, db: Session = Depends(get_db)) -> dict:
+    """Point de collecte sécurisé des accès réseaux du client (Meta, WhatsApp Business) —
+    "office manager". Ne retourne JAMAIS les valeurs soumises : seulement des indicateurs
+    `*_connected` (voir agents/planning/network_access.py, la réponse est write-only par
+    conception)."""
+    try:
+        return network_access_module.set_network_access(client_id, payload, db=db).model_dump(mode="json")
+    except network_access_module.ClientNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @staff_router.get("/prospects/{prospect_id}/pipeline")
