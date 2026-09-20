@@ -11,7 +11,7 @@ CLAUDE.md §5).
 
 | Skill | Rôle | Pourquoi ce choix |
 |---|---|---|
-| **Claude Agent SDK — génération de code/contenu** | Produire le HTML/CSS (ou la structure de contenu) du site à partir du brief client, en respectant un template de secteur. | Cohérent avec le choix d'orchestration global du projet (CLAUDE.md §3) ; permet de combiner génération de texte (contenu du site) et génération de structure (mise en page) dans le même agent, sans dépendance supplémentaire. |
+| **API Claude directe** (SDK `anthropic`, modèle `claude-sonnet-5`) | Générer le contenu textuel du site (accroche, présentation, éléments clés) à partir du brief client, en JSON structuré. | **Correction par rapport à CLAUDE.md §3** : le Claude Agent SDK (harnais complet avec accès Bash/fichiers, boucle autonome) est pensé pour des tâches agentiques ouvertes à plusieurs étapes. Générer du contenu à partir d'un brief structuré est un appel unique, pas une exploration ouverte — l'API Claude directe est le bon niveau d'outil, et évite de donner à cet agent un accès Bash/filesystem qu'il n'a aucune raison d'avoir (CLAUDE.md §5, cloisonnement strict). Implémenté dans `agents/creation_site/content.py`. |
 | **Jinja2** | Moteur de templates Python pour les gabarits de site par secteur (restaurant, boutique, artisan, services...). | Standard de facto en Python, léger, permet de séparer clairement "template de secteur" (fixe, maintenu par l'équipe) et "contenu généré" (variable, produit par l'agent) — essentiel pour la cohérence visuelle entre clients d'un même pack. |
 | **Tailwind CSS** (ou un design system léger équivalent) | Cohérence visuelle et responsive design des sites générés, sans réinventer une bibliothèque de composants par template. | Permet de démarrer vite avec un rendu propre sur mobile — critère important vu l'audience (PME/indépendants consultés majoritairement depuis mobile en Afrique). |
 | **Pillow** | Traitement/redimensionnement des images fournies par le client (logo, photos) pour le rendu final du site. | Librairie Python standard, évite les dépendances lourdes pour un besoin simple d'optimisation d'images. |
@@ -39,6 +39,11 @@ Secteurs volontairement exclus du MVP (à ajouter plus tard selon la demande ré
 clients) : agriculture/agroalimentaire, ONG/associations, et tout autre secteur non listé —
 ils utilisent le template générique en attendant.
 
+**État d'implémentation des templates** (`agents/creation_site/templates/sectors/`) :
+`restaurant` et `generique` sont construits. Les 7 autres secteurs du tableau ci-dessus
+utilisent le template générique par repli automatique (`render.py`) en attendant leur design
+dédié — c'est du travail de contenu/design restant, pas un manque d'agent logic.
+
 ## Génération et publication (tranché)
 
 - **Génération 100% statique (JAMstack)** : chaque site est produit en HTML/CSS statique à
@@ -58,10 +63,36 @@ ils utilisent le template générique en attendant.
      définitive du client). Aucune mise à jour, initiale ou ultérieure, ne passe en
      production sans ce passage par la validation du client.
 
+## Implémentation actuelle
+
+- `brief.py` : `SiteBrief` (nom, secteur, description, contact) et `Sector` (catalogue).
+- `content.py` : `generate_content(brief)` — appel API Claude, validation du JSON retourné
+  via `SiteContent` (pydantic), erreur explicite (`ContentGenerationError`) si la réponse ne
+  correspond pas au schéma attendu.
+- `render.py` : `render_site(brief, content)` — rendu Jinja2, repli automatique vers le
+  template générique si le secteur n'a pas encore de template dédié.
+- `publish.py` : `write_draft(site_id, html)` — écrit le brouillon **en local** pour
+  l'instant (`output/draft/<site_id>/index.html`), en attendant le branchement réel sur
+  Cloudflare R2 (voir point ouvert ci-dessous).
+- `agent.py` : `generate_draft_site(site_id, brief)` — enchaîne les trois étapes ; le
+  contenu structuré (pas le HTML) est la source de vérité stockée en base
+  (`platform_core.models.Site.content`), le HTML est régénérable à tout moment.
+- Exposé via l'API (`app/routers/sites.py`) : `POST /api/sites` (créer), `POST
+  /api/sites/{id}/generate` (générer le brouillon), `GET /api/sites/{id}/preview`
+  (prévisualiser), `POST /api/sites/{id}/publish` (valider → `SiteStatus.published`).
+- Testé : génération de contenu (avec client Claude simulé, sans appel réseau réel), rendu
+  Jinja2, et le flux complet créer→générer→prévisualiser→publier via l'API (voir `tests/`).
+
 ## Points à trancher avant implémentation
 
-- Détail technique de la promotion `draft/` → `live/` (copie objet par objet vs bascule
-  d'un pointeur/alias) — choix d'implémentation, pas bloquant pour la conception.
+- Remplacer `write_draft` (écriture locale) par un vrai upload Cloudflare R2 (préfixe
+  `draft/<site_id>/`) et implémenter `promote_to_live` (copie `draft/` → `live/` à la
+  validation) — nécessite des credentials R2 réels pour être testé, pas fait à ce stade
+  (voir TODO dans `publish.py`).
+- Authentification/autorisation des endpoints `app/routers/sites.py` : pour l'instant
+  n'importe qui peut appeler `/publish` sur n'importe quel site — pas encore de notion
+  d'utilisateur/session, à construire avec le reste du dashboard.
+- Construire les templates dédiés des 7 secteurs restants (actuellement repli générique).
 
 ## Rappel des permissions (voir CLAUDE.md §5)
 

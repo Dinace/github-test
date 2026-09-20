@@ -1,13 +1,21 @@
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import Enum
 
-from sqlalchemy import DateTime, ForeignKey, String
+
+def _utcnow() -> datetime:
+    return datetime.now(UTC)
+
+from sqlalchemy import JSON, DateTime, ForeignKey, String
 from sqlalchemy import Enum as SAEnum
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from platform_core.db import Base
+
+# JSONB sur PostgreSQL (choix acté, CLAUDE.md §3), JSON générique en repli sur les autres
+# dialectes (ex. SQLite en test) où JSONB n'est pas compilable.
+_JSONB = JSON().with_variant(JSONB(), "postgresql")
 
 
 class Pack(str, Enum):
@@ -28,7 +36,7 @@ class Client(Base):
     # dur ailleurs dans l'app : ce champ pilote devise et moyens de paiement disponibles.
     country: Mapped[str] = mapped_column(String(2), default="GA")
     currency: Mapped[str] = mapped_column(String(3), default="XAF")  # ISO 4217
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
     subscription: Mapped["Subscription | None"] = relationship(back_populates="client", uselist=False)
 
@@ -49,6 +57,35 @@ class Subscription(Base):
     # "moov_money") — paramétrable par pays/client, jamais une liste figée (CLAUDE.md §1).
     payment_provider: Mapped[str] = mapped_column(String(50))
     active: Mapped[bool] = mapped_column(default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
     client: Mapped["Client"] = relationship(back_populates="subscription")
+
+
+class SiteStatus(str, Enum):
+    draft = "draft"
+    published = "published"
+
+
+class Site(Base):
+    """Site généré pour un client par l'agent Création de site.
+
+    Cycle brouillon → validation → publication (agents/creation_site/skills/README.md) :
+    un site reste `draft` tant que le client ne l'a pas validé ; seule cette validation fait
+    passer `status` à `published` et fixe `published_at`.
+    """
+
+    __tablename__ = "sites"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    client_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("clients.id"))
+    # Clé du secteur, doit correspondre à un template de agents/creation_site/templates/
+    # (catalogue défini dans agents/creation_site/skills/README.md).
+    sector: Mapped[str] = mapped_column(String(50))
+    brief: Mapped[dict] = mapped_column(_JSONB)
+    content: Mapped[dict | None] = mapped_column(_JSONB, nullable=True)
+    status: Mapped[SiteStatus] = mapped_column(SAEnum(SiteStatus, name="site_status_enum"), default=SiteStatus.draft)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    client: Mapped["Client"] = relationship()

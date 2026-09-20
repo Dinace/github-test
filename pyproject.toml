@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Plateforme de digitalisation pilotée par agents IA pour PME/indépendants en Afrique"
 requires-python = ">=3.12"
 dependencies = [
+    "pydantic>=2.7",
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
     "sqlalchemy>=2.0",
@@ -12,6 +13,7 @@ dependencies = [
     "pydantic-settings>=2.4",
     "jinja2>=3.1",
     "python-multipart>=0.0.9",
+    "anthropic>=0.40",
 ]
 
 [project.optional-dependencies]

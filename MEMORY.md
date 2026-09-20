@@ -467,3 +467,67 @@ Format d'entrée suggéré :
 - Devis direct BSP (WhatsApp), contact Moov Money Gabon, prix d'abonnement final — inchangé,
   voir entrées précédentes.
 - Recalibrer les estimations de coût une fois l'app en production.
+
+---
+
+## 2026-09-20 — Premier agent implémenté : Création de site
+
+**Décisions techniques**
+- **Renommage** `agents/creation-site/` → `agents/creation_site/` et
+  `agents/reseaux-sociaux/` → `agents/reseaux_sociaux/` (snake_case, packages Python
+  valides) — résout le point d'attention posé dans l'entrée précédente. Toutes les
+  références dans `CLAUDE.md` mises à jour ; les entrées passées de ce journal gardent
+  volontairement l'ancien nom (historique, jamais réécrit).
+- **Correction d'architecture** : CLAUDE.md §3 indiquait "Claude Agent SDK" comme choix
+  unique d'orchestration. En implémentant l'agent Création de site, ce choix s'est révélé
+  inadapté pour cette tâche précise : générer du contenu à partir d'un brief structuré est
+  un appel unique (brief -> JSON), pas une exploration agentique ouverte à plusieurs étapes
+  — le Agent SDK (harnais complet avec accès Bash/fichiers) aurait donné à cet agent un
+  accès qu'il n'a aucune raison d'avoir, contraire au cloisonnement strict (CLAUDE.md §5).
+  Choix retenu : **appel direct à l'API Claude** (SDK `anthropic`, modèle `claude-sonnet-5`
+  déjà validé dans `docs/pricing-model.md`). `CLAUDE.md` §3 reformulé pour ne plus imposer
+  un choix d'orchestration unique aux 4 agents : à trancher agent par agent selon la forme
+  réelle de sa tâche.
+- **Modèle de données ajouté** (`platform_core/models.py`) : table `Site` (client_id,
+  secteur, `brief`/`content` en JSON — JSONB sur PostgreSQL via `.with_variant()`, JSON
+  générique en repli sur les autres dialectes pour rester testable en SQLite —, statut
+  `draft`/`published`, `published_at`). Migration Alembic initiale générée et testée
+  (`alembic upgrade head` appliqué avec succès sur une base SQLite jetable) ; un bug connu
+  d'Alembic (import `Text` manquant avec `.with_variant()`) a été corrigé manuellement dans
+  le fichier de migration généré.
+- **Code de l'agent** (`agents/creation_site/`) : `brief.py` (SiteBrief, catalogue Sector),
+  `content.py` (génération de contenu via l'API Claude, validation stricte du JSON retourné
+  avec erreur explicite si non conforme), `render.py` (rendu Jinja2 avec repli automatique
+  vers le template générique), `publish.py` (écriture du brouillon — **en local pour
+  l'instant**, l'upload réel vers Cloudflare R2 reste à faire, nécessite des credentials
+  réels pour être testé), `agent.py` (orchestration brief -> contenu -> rendu -> brouillon).
+  Deux templates Jinja2 construits (`restaurant`, `generique`) sur les 10 du catalogue ; les
+  7 autres retombent sur le générique en attendant leur design.
+  Exposé via `app/routers/sites.py` : create / generate / preview / publish.
+- **Tests** (9 au total, tous passent) : génération de contenu avec client Claude simulé
+  (aucun appel réseau réel, donc aucun coût ni besoin de clé API pour lancer la suite),
+  rendu Jinja2 (dont le repli vers le générique), et le flux complet de l'API avec une base
+  SQLite jetable et génération de contenu simulée.
+
+**État d'avancement par agent**
+- Création de site : premier agent avec du vrai code, testé de bout en bout (hors upload R2
+  réel et authentification, notés comme restants). Les 3 autres agents : conception
+  seulement, aucun code.
+
+**Problèmes rencontrés / solutions**
+- `JSONB` (PostgreSQL) non compilable par SQLite lors des tests → résolu avec
+  `JSON().with_variant(JSONB(), "postgresql")` (JSONB en prod, JSON générique en test).
+- Migration Alembic générée avec un import manquant (`Text`) → corrigé manuellement.
+- Un test comparait une chaîne contenant une apostrophe au HTML rendu sans tenir compte de
+  l'échappement automatique de Jinja2 (comportement correct, à ne jamais désactiver) →
+  chaîne de test corrigée plutôt que le code.
+
+**Questions ouvertes**
+- Upload réel vers Cloudflare R2 (`draft/`/`live/`) — nécessite des credentials réels.
+- Authentification/autorisation des endpoints `/api/sites/*` — inexistante à ce stade.
+- Construire les 7 templates de secteur restants.
+- Implémenter les 3 autres agents (Réseaux sociaux, Maintenance, Prospection) — trancher
+  pour chacun API directe vs Agent SDK vs Tool Runner selon la forme de leur tâche réelle
+  (ex. la Prospection, qui doit chercher/naviguer, pourrait justifier un usage d'outils plus
+  proche de l'agentique que la Création de site).
+- Devis direct BSP (WhatsApp), contact Moov Money Gabon, prix d'abonnement final — inchangé.

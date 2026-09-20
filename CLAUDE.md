@@ -74,11 +74,19 @@ L'arborescence est :
 
 ```
 agents/
-  creation-site/skills/README.md
-  reseaux-sociaux/skills/README.md
+  creation_site/skills/README.md
+  reseaux_sociaux/skills/README.md
   maintenance/skills/README.md
   prospection/skills/README.md
 ```
+
+Noms de dossiers en snake_case (et non kebab-case comme dans les premières versions de ce
+document) : ce sont aussi des packages Python valides, importables directement (ex.
+`agents.creation_site`).
+
+`agents/creation_site/` contient désormais aussi du code (premier agent implémenté — voir
+`agents/creation_site/skills/README.md` section "Implémentation actuelle"). Les 3 autres
+agents n'ont encore que leur `skills/README.md` (conception, pas de code).
 
 Chaque `skills/README.md` documente les skills/frameworks/librairies retenus pour l'agent
 concerné, avec justification, points encore à trancher, et rappel des permissions qui lui
@@ -87,7 +95,16 @@ sont propres.
 ## 3. Stack technique
 
 - **Langage/runtime principal** : Python.
-- **Orchestration des agents IA** : Claude Agent SDK (agents outillés, mémoire, actions).
+- **Orchestration des agents IA** : pas un choix unique pour les 4 agents — à trancher par
+  agent selon la forme réelle de sa tâche (voir `shared/agent-design.md`/tableau de décision
+  du skill `claude-api` : un appel unique structuré n'a pas besoin du même outil qu'une
+  exploration ouverte à plusieurs étapes). Pour l'agent Création de site : **API Claude
+  directe** (SDK `anthropic`, un appel structuré brief → contenu JSON), pas le Claude Agent
+  SDK — ce dernier donnerait un accès Bash/fichiers inutile et contraire au cloisonnement
+  strict (section 5). Voir `agents/creation_site/skills/README.md` pour la justification
+  complète. Les 3 autres agents n'ont pas encore leur code implémenté : le même arbitrage
+  (API directe vs Agent SDK vs Tool Runner) est à refaire pour chacun au moment de
+  l'implémenter, pas à supposer identique.
 - **Base de données** : PostgreSQL (SQLAlchemy + Alembic pour les migrations), avec des
   colonnes JSONB pour le contenu semi-structuré et variable par agent (structure de site
   généré, contenu réseaux sociaux, champs libres de fiche prospect).
@@ -129,11 +146,12 @@ sont propres.
 
 Toutes les décisions de stack sont désormais actées. Détail de la génération de site
 (catalogue de templates par secteur, mode de publication) : voir
-`agents/creation-site/skills/README.md`.
+`agents/creation_site/skills/README.md`.
 
-Tant que le scaffolding applicatif (pyproject.toml, package Python, migrations) n'existe
-pas, aucun agent IA ne doit générer de code d'implémentation définitif au-delà de la
-structure de fichiers et de la documentation.
+Le scaffolding applicatif existe (voir section 6) : `platform_core/` (config, DB, modèles),
+`app/` (FastAPI + dashboard), `migrations/` (Alembic), `Dockerfile`/`fly.toml`. Le code
+métier des agents peut désormais être implémenté à l'intérieur de `agents/<nom-agent>/`, en
+respectant le périmètre et les permissions de chaque agent (section 5).
 
 ## 4. Conventions du projet
 
@@ -146,14 +164,9 @@ structure de fichiers et de la documentation.
 - **Secrets** : jamais de secret, clé ou token en clair dans le dépôt (voir section 5 et
   `config/credentials/README.md`).
 - **Structure de dossiers, nommage de fichiers, style de code** : Python (PEP 8, snake_case
-  pour modules/fonctions). **Point d'attention non résolu** : les dossiers `agents/<nom-
-  agent>/` (section 2) sont en kebab-case (ex. `creation-site`), qui n'est pas un nom de
-  package Python valide (les tirets cassent `import agents.creation-site`). Ces dossiers ne
-  contiennent pour l'instant que `skills/README.md` (documentation), donc ce n'est pas
-  encore bloquant. Avant d'y ajouter du code Python exécuté par le Claude Agent SDK, il
-  faudra trancher : import par chemin de fichier (`importlib.util`) en gardant le
-  kebab-case, ou renommage en snake_case (impact : mise à jour de tous les chemins déjà
-  référencés dans `CLAUDE.md`/`MEMORY.md`).
+  pour modules/fonctions/dossiers de package). Les dossiers `agents/<nom-agent>/` sont en
+  snake_case (`creation_site`, `reseaux_sociaux`, `maintenance`, `prospection`) — packages
+  Python valides, importables directement (`agents.creation_site`).
 
 ## 5. Sécurité et permissions des agents IA
 
@@ -190,19 +203,23 @@ intervient sur le code du projet lui-même.
 ## 6. Lancer et tester le projet en local
 
 Scaffolding applicatif créé : package partagé `platform_core/` (config, accès DB, modèles),
-app FastAPI + dashboard dans `app/`, migrations Alembic dans `migrations/`. Aucun code
-métier des agents n'est encore implémenté (voir `agents/<nom-agent>/skills/README.md` pour
-la conception, pas encore de code).
+app FastAPI + dashboard dans `app/`, migrations Alembic dans `migrations/`. Premier agent
+implémenté : Création de site (`agents/creation_site/`, voir son `skills/README.md`). Les 3
+autres agents n'ont encore que leur conception (`agents/<nom-agent>/skills/README.md`), pas
+de code.
 
 1. Copier `config/credentials/.env.example` vers `config/credentials/.env` et renseigner au
    minimum `DATABASE_URL` (PostgreSQL local ou distant). La clé API Claude n'est **jamais**
-   placée ici : elle est fournie à l'exécution par un mécanisme séparé (variable
-   d'environnement gérée hors dépôt), documenté ultérieurement.
+   placée ici : elle est fournie à l'exécution par la variable d'environnement standard
+   `ANTHROPIC_API_KEY`, définie hors dépôt (nécessaire uniquement pour appeler réellement
+   `POST /api/sites/{id}/generate` ; les tests, eux, simulent le client Claude et n'ont besoin
+   d'aucune clé).
 2. Installer les dépendances (Python ≥ 3.12) : `pip install -e ".[dev]"`
 3. Appliquer les migrations : `alembic upgrade head`
 4. Lancer l'app : `uvicorn app.main:app --reload`, puis ouvrir `http://localhost:8000`
    (`/healthz` pour vérifier que l'app répond).
-5. Lancer les tests : `pytest`
+5. Lancer les tests : `pytest` (aucun appel réseau réel, y compris vers l'API Claude —
+   entièrement simulé).
 
 Déploiement (Fly.io, `fly.toml`) : `fly deploy` après avoir renommé `app` dans `fly.toml`
 (nom unique global sur Fly.io) et configuré les secrets (`fly secrets set DATABASE_URL=...`,

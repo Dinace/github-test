@@ -29,3 +29,7 @@ node_modules/
 # Logs et fichiers locaux
 *.log
 .env
+
+# Sites générés localement en brouillon (agents/creation_site/publish.py) — artefact
+# régénérable, jamais la source de vérité (celle-ci est en base, colonne Site.content).
+output/
