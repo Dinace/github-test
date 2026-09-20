@@ -915,3 +915,71 @@ annoncées à l'utilisateur avant de commencer.
 - Toutes les autres questions ouvertes des entrées précédentes restent valables (génération
   de visuels Pillow, export PowerPoint des offres, recherche Meta Graph API, scan d'en-têtes
   HTTP des sites clients, vrai système de comptes staff, flux OAuth Meta/WhatsApp, etc.).
+
+## 2026-09-20 — Infrastructure de tâches planifiées (APScheduler) : Réseaux sociaux + Maintenance
+
+**Contexte** : suite du lot précédent ("réalise le non fait"). L'élément annoncé comme
+suivant — l'infrastructure de planification qui débloque plusieurs agents à la fois.
+
+**Infrastructure partagée**
+- `platform_core/scheduler.py::create_scheduler()` — un seul `BackgroundScheduler`
+  (APScheduler), démarré/arrêté depuis le lifespan FastAPI (`app/main.py`), enregistrant les
+  4 jobs ci-dessous. Chaque job ouvre sa propre `Session` SQLAlchemy à chaque exécution
+  (jamais partagée entre deux déclenchements) et est enveloppé (`_safe`) pour qu'une
+  exception dans un job n'arrête jamais le scheduler entier.
+- Vérifié explicitement que le lifespan ne se déclenche pas pendant les tests : la suite
+  utilise `TestClient(app)` sans bloc `with` partout, ce qui ne déclenche pas les
+  événements de lifespan ASGI (confirmé par un test isolé avant d'écrire le code) — aucun
+  job planifié ne tourne donc en arrière-plan pendant `pytest`, testé aussi en conditions
+  réelles (`with TestClient(app) as client:` démarre bien le scheduler, l'arrête bien à la
+  sortie).
+- Piège découvert et corrigé : les colonnes `DateTime` de `platform_core/models.py` sont
+  sans fuseau (comportement identique SQLite/PostgreSQL — vérifié empiriquement) : une
+  valeur aware assignée à une colonne y perd son tzinfo, à l'écriture comme après relecture
+  depuis la base. Comparer un `datetime.now(UTC)` (aware) à une valeur rechargée (naïve)
+  lève `TypeError`. Convention adoptée dans `agents/maintenance/scheduled_jobs.py` : une
+  fonction `_now_naive_utc()` dédiée pour toute arithmétique contre une colonne de la base,
+  gardant `datetime.now(UTC)` (aware) uniquement pour les appels à `agents/maintenance/
+  backup.py`, dont les clés R2 sont elles-mêmes parsées en datetimes aware.
+
+**Réseaux sociaux : auto-publication**
+- `agents/reseaux_sociaux/agent.py::publish_scheduled_post(post, client)` — logique de
+  construction du message + appel Meta, extraite de `app/routers/posts.py` pour être
+  réutilisée à l'identique par l'endpoint manuel et par la tâche planifiée.
+- `agents/reseaux_sociaux/scheduled_jobs.py::publish_due_posts` — publie tout post
+  `scheduled` dont `scheduled_at` est échu (tick de 5 minutes). Échec (page non connectée,
+  rejet Meta) → notification staff, une seule par post tant qu'elle n'est pas acquittée (le
+  post reste `scheduled`, retenté au tick suivant).
+
+**Maintenance : 3 tâches planifiées, une décision produit tranchée au passage**
+- Décision actée (jamais explicitement tranchée avant cette session) : la sauvegarde et le
+  scan de sécurité portent sur une ressource **partagée par toute la plateforme** (un seul
+  `pg_dump`, un seul `pip-audit`), sans notion par client — leur cadence suit donc
+  l'abonnement actif le plus exigeant (Premium > Business > Starter, ce dernier sans scan de
+  sécurité), pas une moyenne ni un calcul par client.
+- `run_backups_and_retention` : compare l'échéance au dernier `Backup.created_at` réel (pas
+  de nouvelle table de log) ; échec → notification critique (`backup_failure`), comme avant.
+- `run_security_scans` : compare à la dernière notification `security_finding` — une
+  notification "aucune vulnérabilité" est désormais créée même sans trouvaille, uniquement
+  pour disposer de cet horodatage (pas de table de log de scan dédiée).
+- `run_uptime_checks` : par site, au rythme de l'abonnement actif du client (30 min/5 min/1
+  min — "temps réel" Premium approximé faute d'infrastructure de push). 3 champs ajoutés à
+  `Site` (`uptime_monitor_id`, `last_uptime_check_at`, `down_since`), comblant l'ancien point
+  ouvert "pas encore de champ uptime_monitor_id" (migration `8c6ca4a3abc8`). Notifie une
+  seule fois par période d'indisponibilité continue.
+
+**Divers**
+- 121 tests au total (contre 107 avant ce lot), tous passent. Packaging non-éditable
+  revérifié (nouveau `/tmp/test-install-venv`) : imports, démarrage de l'app et du scheduler
+  OK. Smoke-test manuel des 4 jobs contre une vraie base SQLite vide (hors suite de tests).
+
+**Questions ouvertes restantes**
+- Planning : rappels de RDV automatiques toujours pas branchés — décision volontairement
+  reportée, pas bâclée : nécessite un numéro de contact PME (`Client.contact_phone`
+  n'existe pas encore) et des identifiants WhatsApp **au niveau plateforme** (pas ceux du
+  client, puisque c'est le staff qui initie le rappel), pas encore modélisés dans
+  `platform_core/config.py`. À reprendre comme un lot dédié plutôt que rajouté au forceps
+  ici.
+- Instrumentation `ActivityEvent` toujours manquante pour Création de site et Réseaux
+  sociaux (seul Prospection émet des événements).
+- Toutes les autres questions ouvertes des entrées précédentes restent valables.

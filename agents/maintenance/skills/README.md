@@ -14,8 +14,9 @@ CLAUDE.md §5 ("notifier un humain en cas de décision sensible ou d'anomalie d�
 |---|---|---|
 | **Sentry** (`SENTRY_DSN`) | Remontée et agrégation des erreurs/bugs applicatifs en temps réel. | Standard de l'industrie, intégration Python mature, réduit le besoin de développer un système de tracking d'erreurs maison. |
 | **UptimeRobot API** (`UPTIME_MONITOR_TOKEN`) | Surveillance de disponibilité des sites clients (uptime, temps de réponse). | Service managé simple à intégrer via API, évite d'opérer une infrastructure de monitoring dédiée dès le MVP. |
-| **Sauvegardes planifiées** (variables `CLOUDFLARE_R2_*` + `pg_dump`/export de fichiers + Celery beat) | Sauvegarde régulière des données/sites clients vers Cloudflare R2. | `pg_dump` est l'outil standard pour PostgreSQL (cohérent avec le choix de base de données, CLAUDE.md §3) ; planification via la même solution de tâches planifiées que l'agent Réseaux sociaux, pour mutualiser l'infrastructure ; stockage sur R2 cohérent avec le choix d'hébergement (CLAUDE.md §3). |
+| **Sauvegardes planifiées** (variables `CLOUDFLARE_R2_*` + `pg_dump`/export de fichiers) | Sauvegarde régulière des données/sites clients vers Cloudflare R2. | `pg_dump` est l'outil standard pour PostgreSQL (cohérent avec le choix de base de données, CLAUDE.md §3) ; stockage sur R2 cohérent avec le choix d'hébergement (CLAUDE.md §3). |
 | **Scan de sécurité basique** (ex. vérification d'en-têtes HTTP, dépendances obsolètes via `pip-audit`) | Détection de vulnérabilités simples sur les sites générés et le code de la plateforme. | Outils légers et open-source, suffisants pour un premier niveau de contrôle ; un scan plus poussé (type OWASP ZAP) pourra être ajouté plus tard si le besoin est confirmé. |
+| **APScheduler** (`BackgroundScheduler`, `platform_core/scheduler.py`, partagé avec l'agent Réseaux sociaux et l'agent Planning) | Déclenche automatiquement sauvegardes/rétention, scans de sécurité et vérifications de disponibilité, à la place des appels manuels initiaux à l'API. | Préféré à Celery (envisagé initialement) : pas de broker externe (Redis/RabbitMQ) à opérer en plus pour une petite équipe qui démarre (CLAUDE.md §3, même logique que Fly.io/R2 vs AWS), suffisant pour des tâches périodiques dans le même process que l'app FastAPI. À réévaluer si le volume ou le besoin de distribuer les jobs sur plusieurs machines apparaît. |
 
 ## Politique de rétention des sauvegardes (tranché)
 
@@ -89,20 +90,34 @@ communiquer clairement au client dans les conditions d'utilisation du pack.
   étalées sur plusieurs mois), seuil de disponibilité, parsing pip-audit, le refus
   d'exécuter une restauration non confirmée (le garde-fou central), et le flux complet via
   l'API — aucun appel réseau réel (Postgres, R2, UptimeRobot, Sentry tous simulés).
+- `scheduled_jobs.py` : 3 tâches planifiées (APScheduler, voir `platform_core/scheduler.py`)
+  remplaçant les déclenchements manuels ci-dessus.
+  - `run_backups_and_retention` / `run_security_scans` : la sauvegarde (un seul `pg_dump` de
+    toute la base) et le scan de sécurité (un seul `pip-audit` des dépendances de la
+    plateforme) portent sur une ressource **partagée**, sans notion par client — décision
+    actée dans cette session : leur cadence suit l'abonnement actif le plus exigeant
+    (Premium > Business > Starter, ce dernier n'ayant pas de scan de sécurité du tout),
+    calculée à chaque tick à partir du dernier `Backup`/de la dernière notification
+    `security_finding` plutôt que fixée une fois pour toutes.
+  - `run_uptime_checks` : par site (`Site.uptime_monitor_id`, `Site.last_uptime_check_at`,
+    `Site.down_since` — 3 champs ajoutés, comblant l'ancien point ouvert), au rythme propre
+    à l'abonnement actif du client (30 min/5 min/1 min, "temps réel" Premium approximé).
+    Notifie une seule fois par période d'indisponibilité (pas de doublon à chaque tick tant
+    que la précédente notification n'est pas acquittée).
+- Le lifespan FastAPI (`app/main.py`) démarre le scheduler au lancement réel de l'app — pas
+  pendant les tests, qui instancient `TestClient(app)` sans bloc `with` (vérifié
+  explicitement : aucun job planifié ne tourne pendant la suite de tests).
 
 ## Points ouverts (pas encore fait, explicitement)
 
-- **Vraie tâche planifiée** (Celery beat/APScheduler) qui déclenche sauvegardes, scans de
-  sécurité et vérifications de disponibilité automatiquement — pour l'instant, tout se
-  déclenche via un appel manuel à l'API (`POST /api/maintenance/backups`, etc.), même
-  limite que la planification des publications de l'agent Réseaux sociaux.
 - **Vraie authentification staff** — le jeton d'opération partagé (`OPS_API_TOKEN`) n'est
   qu'un verrou minimal, pas un système avec comptes individuels/rôles/audit par utilisateur.
 - Vérification de connectivité réelle : `pg_dump`/`psql` (Postgres), R2 et UptimeRobot n'ont
   jamais été exécutés contre de vrais services dans cette session (credentials non
   disponibles) — seule la logique est testée avec des doublures.
-- Détection de "site indisponible" pas encore reliée à un monitor UptimeRobot précis par
-  site (`Site` n'a pas encore de champ `uptime_monitor_id`).
+- Création automatique d'un monitor UptimeRobot à la publication d'un site — aujourd'hui
+  `Site.uptime_monitor_id` doit être renseigné manuellement, sinon la tâche planifiée
+  ignore ce site.
 - Scan de sécurité des sites clients générés eux-mêmes (en-têtes HTTP) — seul le scan des
   dépendances Python de la plateforme (`pip-audit`) est implémenté pour l'instant.
 

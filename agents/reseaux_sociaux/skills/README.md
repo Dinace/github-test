@@ -15,7 +15,7 @@ touche jamais au code ou aux données d'un autre agent.
 | **API Claude directe** (SDK `anthropic`, modèle `claude-sonnet-5`) | Rédaction des textes de publication (posts, légendes) à partir du brief et du ton de marque du client. | **Correction** : même raisonnement que l'agent Création de site (CLAUDE.md §3) — générer un texte à partir d'un brief structuré est un appel unique, pas une tâche agentique ouverte ; le Claude Agent SDK (accès Bash/fichiers) n'a pas d'utilité ici et élargirait le périmètre de l'agent sans raison. Implémenté dans `agents/reseaux_sociaux/content.py`. |
 | **Meta Graph API** (`META_ADS_TOKEN`, `META_APP_ID/SECRET`) | Publication et gestion de campagnes sur Facebook/Instagram. | API officielle, seule voie légitime pour publier au nom du client ; nécessaire pour respecter les conditions d'utilisation des plateformes. |
 | **WhatsApp Business API** (`WHATSAPP_BUSINESS_TOKEN`) | Messages clients (confirmations, notifications), catalogue produit si applicable. | Canal de communication le plus utilisé par les PME/indépendants dans le marché cible ; API officielle obligatoire pour un usage professionnel conforme. |
-| **APScheduler / Celery beat** | Planification du calendrier de publication (dates/heures programmées). | Solution standard en Python pour des tâches planifiées ; Celery beat si l'infrastructure prévoit déjà une file de tâches (ex. pour la Maintenance), sinon APScheduler pour un besoin plus léger. |
+| **APScheduler** (`BackgroundScheduler`, `platform_core/scheduler.py`, partagé avec l'agent Maintenance et l'agent Planning) | Planification du calendrier de publication (dates/heures programmées) : `scheduled_jobs.py::publish_due_posts`. | **Tranché** (pas encore décidé à l'écriture initiale de ce tableau) : APScheduler plutôt que Celery, pour ne pas avoir à opérer de broker externe (Redis/RabbitMQ) en plus pour une petite équipe qui démarre — cohérent avec les choix d'infrastructure "simple à opérer" de CLAUDE.md §3. |
 | **Pillow** (+ gabarits graphiques) | Génération de visuels simples (bannières, citations, promos) à partir d'un template de marque par client. | Suffisant pour des visuels basiques sans dépendance à un service tiers payant ; à réévaluer si un besoin de design plus avancé émerge (ex. API Canva). |
 
 ## Format du brief et workflow de validation (tranché)
@@ -33,7 +33,7 @@ touche jamais au code ou aux données d'un autre agent.
 3. `validé` — le client approuve tel quel, ou l'agent régénère après une demande de
    modification (retour à `brouillon`).
 4. `planifié` puis `publié` — seul un contenu `validé` peut entrer dans la file de
-   publication planifiée (APScheduler/Celery beat) ; la transition `validé` → `publié` est
+   publication planifiée (APScheduler) ; la transition `validé` → `publié` est
    la seule qui déclenche un appel réel à l'API Meta/WhatsApp.
 
 Traçabilité : chaque changement de statut (qui, quand, quoi) est stocké en base
@@ -76,15 +76,21 @@ n'est pas confirmée — la clé reste documentée dans `config/credentials/` sa
 - Testé : génération de contenu (client Claude simulé), publication Meta (client HTTP
   simulé), et le flux complet create→generate→request-changes→generate→validate→schedule→
   publish via l'API (voir `tests/`) — aucun appel réseau réel dans la suite de tests.
+- `scheduled_jobs.py::publish_due_posts` : tâche planifiée (APScheduler, voir
+  `platform_core/scheduler.py`, tick de 5 minutes) qui publie automatiquement tout post
+  `scheduled` dont `scheduled_at` est échu — comble le point ouvert "rien ne déclenche
+  encore `publish` automatiquement". La construction du message et l'appel Meta sont
+  factorisés dans `agent.py::publish_scheduled_post`, réutilisé par l'endpoint manuel
+  `POST /api/posts/{id}/publish` et par la tâche planifiée, pour ne pas dupliquer la
+  logique. En cas d'échec (page non connectée, rejet Meta), le post reste `scheduled` et
+  une notification staff est créée (une seule par post tant qu'elle n'est pas acquittée,
+  pas de spam à chaque tick de retentative).
 
 ## Points à trancher avant implémentation
 
 - Flux OAuth de connexion Meta (Facebook Login, sélection de Page, échange/rafraîchissement
   de token longue durée) — pas implémenté, `meta_page_id`/`meta_page_access_token` doivent
   être renseignés manuellement en attendant.
-- Vraie planification automatique (APScheduler/Celery beat) : `POST .../schedule` fixe
-  `scheduled_at` en base, mais rien ne déclenche encore `publish` automatiquement à cette
-  date — actuellement un appel manuel à `/publish`, une tâche planifiée reste à construire.
 - Génération de visuels (Pillow) — pas implémentée, `visual_provided_by_client` existe dans
   le brief mais rien ne consomme un visuel généré ou fourni pour l'instant.
 - WhatsApp Business : flux de messagerie (opt-in, templates approuvés) à concevoir

@@ -137,18 +137,10 @@ def publish_post(
     post = _get_owned_post(post_id, current_client, db)
     _require_status(post, PostStatus.scheduled)
 
-    if not current_client.meta_page_id or not current_client.meta_page_access_token:
-        raise HTTPException(
-            status_code=412,
-            detail="Aucune Page Meta connectée pour ce client (meta_page_id/meta_page_access_token manquants)",
-        )
-
-    content = PostContent.model_validate(post.content)
-    hashtags = " ".join(f"#{tag}" for tag in content.hashtags)
-    message = f"{content.caption}\n\n{hashtags}".strip()
-
     try:
-        meta.publish_to_meta(current_client.meta_page_id, current_client.meta_page_access_token, message)
+        post_agent.publish_scheduled_post(post, current_client)
+    except post_agent.MissingMetaConnectionError as exc:
+        raise HTTPException(status_code=412, detail=str(exc)) from exc
     except meta.MetaPublishError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 

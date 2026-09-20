@@ -135,6 +135,15 @@ class Site(Base):
     status: Mapped[SiteStatus] = mapped_column(SAEnum(SiteStatus, name="site_status_enum"), default=SiteStatus.draft)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
     published_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Surveillance de disponibilité (agents/maintenance/uptime.py) — renseigné manuellement
+    # pour l'instant (pas de création automatique de monitor UptimeRobot à la publication du
+    # site). Tant qu'il est vide, la tâche planifiée de vérification d'uptime ignore ce site.
+    uptime_monitor_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    last_uptime_check_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Horodatage du début de l'indisponibilité en cours (remis à None dès que le site est de
+    # nouveau up) — nécessaire pour appliquer le seuil des 15 minutes de
+    # uptime.should_notify_downtime avant de notifier un humain.
+    down_since: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     client: Mapped["Client"] = relationship()
 

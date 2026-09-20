@@ -132,6 +132,15 @@ sont propres.
   encore créé à ce stade.
 - **Framework web/API** : **FastAPI**. Async, léger, adapté pour exposer les actions des
   agents (Claude Agent SDK) côté serveur et documenter l'API automatiquement (OpenAPI).
+- **Tâches planifiées** : **APScheduler** (`BackgroundScheduler`, un seul scheduler partagé,
+  démarré dans le lifespan de l'app — voir `platform_core/scheduler.py`), pas Celery :
+  évite d'opérer un broker externe (Redis/RabbitMQ) en plus pour une petite équipe qui
+  démarre, cohérent avec la logique déjà appliquée au choix d'hébergement (simplicité
+  d'opération avant scalabilité maximale). À réévaluer si le volume de jobs ou le besoin de
+  les distribuer sur plusieurs machines l'exige. Utilisé par les agents Réseaux sociaux
+  (auto-publication), Maintenance (sauvegardes/rétention, scan de sécurité, disponibilité)
+  et, à terme, Planning (rappels de RDV — pas encore branché, voir
+  `agents/planning/skills/README.md`).
 - **Dashboard client** : rendu côté serveur, stack 100% Python plutôt qu'un frontend JS
   séparé.
   - **Jinja2** pour les templates (déjà utilisé par l'agent Création de site — une seule
