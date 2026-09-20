@@ -531,3 +531,57 @@ Format d'entrée suggéré :
   (ex. la Prospection, qui doit chercher/naviguer, pourrait justifier un usage d'outils plus
   proche de l'agentique que la Création de site).
 - Devis direct BSP (WhatsApp), contact Moov Money Gabon, prix d'abonnement final — inchangé.
+
+---
+
+## 2026-09-20 — Agent Création de site complété (templates, R2, authentification)
+
+**Décisions techniques**
+- **10/10 templates de secteur construits** (`agents/creation_site/templates/sectors/`) :
+  les 7 restants (boutique, beauté & bien-être, artisanat, services professionnels, santé,
+  hôtellerie & tourisme, éducation & formation, événementiel) suivent le même mécanisme que
+  `restaurant`/`generique` — héritage de `base.html.jinja` avec libellé de section adapté.
+  Le template `sante` porte un commentaire Jinja (non visible visiteur) rappelant la
+  contrainte "aucun contenu médical sans validation professionnelle" déjà appliquée au
+  niveau du prompt de génération — filet de sécurité en plus, pas une nouvelle règle.
+- **Upload réel vers Cloudflare R2** (`agents/creation_site/storage.py`, via `boto3`,
+  compatible S3) : `upload_draft` écrit sous `draft/<site_id>/`, `promote_to_live` copie
+  vers `live/<site_id>/` à la validation. Le fichier `publish.py` (écriture locale,
+  placeholder) est supprimé, remplacé par ce module. Client S3 injectable pour les tests —
+  aucune connectivité réelle à R2 vérifiée (pas de credentials disponibles), seule la
+  logique (clés, préfixes, copie) est testée avec un client simulé.
+- **Authentification par clé API** (`platform_core/auth.py`, `app/auth.py`) : clé aléatoire
+  haute entropie hachée en SHA-256 (choix justifié : correct pour un secret déjà
+  haute-entropie, contrairement à un mot de passe humain qui demanderait bcrypt/argon2).
+  Nouveau champ `Client.api_key_hash` (migration Alembic dédiée, séparée de la migration
+  initiale — jamais réécrire une migration existante). Nouvel endpoint `POST /api/clients`
+  (crée un client, retourne la clé API une seule fois). Tous les endpoints
+  `app/routers/sites.py` exigent désormais `Authorization: Bearer <clé>` et vérifient que le
+  site appartient au client authentifié (403 sinon) — corrige au passage une faille de
+  cloisonnement : l'ancien `POST /api/sites` acceptait un `client_id` arbitraire en
+  paramètre, permettant de créer un site pour n'importe quel client sans vérification.
+  Portée explicitement limitée à une authentification machine-à-machine par clé API ; le
+  login humain avec session pour le dashboard reste à concevoir séparément.
+- 24 tests au total (contre 9 avant cette session), tous passent, toujours aucun appel
+  réseau réel (Claude et R2 tous deux simulés dans les tests).
+
+**État d'avancement par agent**
+- Création de site : fonctionnellement complet pour le MVP (10 templates, génération,
+  stockage R2, cycle brouillon/validation/publication, authentification/cloisonnement par
+  client). Restent : vérification de connectivité R2 réelle (credentials manquants), login
+  humain pour le dashboard. Les 3 autres agents : conception seulement, aucun code.
+
+**Problèmes rencontrés / solutions**
+- `alembic revision --autogenerate` contre SQLite a généré du bruit (faux changements de
+  type `NUMERIC()` → `UUID()` sur des colonnes inchangées, artefact de la faible typologie
+  de SQLite) en plus du vrai changement (`api_key_hash`) → migration nettoyée manuellement
+  pour ne garder que les opérations réelles avant de la committer.
+- Un test simulant `Environment.get_template` de Jinja2 a échoué car Jinja2 appelle cette
+  méthode avec des arguments positionnels supplémentaires en interne (résolution de
+  `{% extends %}`) → wrapper de test corrigé pour accepter `*args, **kwargs`.
+
+**Questions ouvertes**
+- Vérifier la connectivité réelle à R2 une fois `config/credentials/.env` renseigné.
+- Concevoir le login humain du dashboard (au-delà de la clé API machine-à-machine).
+- Implémenter les 3 autres agents (Réseaux sociaux, Maintenance, Prospection).
+- Devis direct BSP (WhatsApp), contact Moov Money Gabon, prix d'abonnement final — inchangé.

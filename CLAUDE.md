@@ -209,17 +209,20 @@ autres agents n'ont encore que leur conception (`agents/<nom-agent>/skills/READM
 de code.
 
 1. Copier `config/credentials/.env.example` vers `config/credentials/.env` et renseigner au
-   minimum `DATABASE_URL` (PostgreSQL local ou distant). La clé API Claude n'est **jamais**
+   minimum `DATABASE_URL` (PostgreSQL local ou distant). Pour utiliser réellement l'agent
+   Création de site, renseigner aussi les 4 variables `CLOUDFLARE_R2_*`/
+   `CLOUDFLARE_ACCOUNT_ID` (stockage des sites générés). La clé API Claude n'est **jamais**
    placée ici : elle est fournie à l'exécution par la variable d'environnement standard
    `ANTHROPIC_API_KEY`, définie hors dépôt (nécessaire uniquement pour appeler réellement
-   `POST /api/sites/{id}/generate` ; les tests, eux, simulent le client Claude et n'ont besoin
-   d'aucune clé).
+   `POST /api/sites/{id}/generate`).
 2. Installer les dépendances (Python ≥ 3.12) : `pip install -e ".[dev]"`
 3. Appliquer les migrations : `alembic upgrade head`
 4. Lancer l'app : `uvicorn app.main:app --reload`, puis ouvrir `http://localhost:8000`
-   (`/healthz` pour vérifier que l'app répond).
-5. Lancer les tests : `pytest` (aucun appel réseau réel, y compris vers l'API Claude —
-   entièrement simulé).
+   (`/healthz` pour vérifier que l'app répond). Créer un client via `POST /api/clients`
+   (retourne une clé API à conserver) pour appeler ensuite les endpoints `/api/sites/*` avec
+   `Authorization: Bearer <clé API>`.
+5. Lancer les tests : `pytest` — aucun appel réseau réel (ni API Claude, ni R2 : les deux
+   sont simulés dans les tests), aucune clé/credential nécessaire pour lancer la suite.
 
 Déploiement (Fly.io, `fly.toml`) : `fly deploy` après avoir renommé `app` dans `fly.toml`
 (nom unique global sur Fly.io) et configuré les secrets (`fly secrets set DATABASE_URL=...`,

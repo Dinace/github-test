@@ -2,16 +2,17 @@ import uuid
 from datetime import UTC, datetime
 from enum import Enum
 
-
-def _utcnow() -> datetime:
-    return datetime.now(UTC)
-
 from sqlalchemy import JSON, DateTime, ForeignKey, String
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from platform_core.db import Base
+
+
+def _utcnow() -> datetime:
+    return datetime.now(UTC)
+
 
 # JSONB sur PostgreSQL (choix acté, CLAUDE.md §3), JSON générique en repli sur les autres
 # dialectes (ex. SQLite en test) où JSONB n'est pas compilable.
@@ -36,6 +37,10 @@ class Client(Base):
     # dur ailleurs dans l'app : ce champ pilote devise et moyens de paiement disponibles.
     country: Mapped[str] = mapped_column(String(2), default="GA")
     currency: Mapped[str] = mapped_column(String(3), default="XAF")  # ISO 4217
+    # Hash SHA-256 (hex, 64 caractères) de la clé API du client — jamais la clé en clair
+    # (voir platform_core/auth.py pour la justification du choix SHA-256 plutôt que
+    # bcrypt/argon2 dans ce cas précis).
+    api_key_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
     subscription: Mapped["Subscription | None"] = relationship(back_populates="client", uselist=False)

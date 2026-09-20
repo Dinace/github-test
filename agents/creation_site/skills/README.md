@@ -39,10 +39,12 @@ Secteurs volontairement exclus du MVP (à ajouter plus tard selon la demande ré
 clients) : agriculture/agroalimentaire, ONG/associations, et tout autre secteur non listé —
 ils utilisent le template générique en attendant.
 
-**État d'implémentation des templates** (`agents/creation_site/templates/sectors/`) :
-`restaurant` et `generique` sont construits. Les 7 autres secteurs du tableau ci-dessus
-utilisent le template générique par repli automatique (`render.py`) en attendant leur design
-dédié — c'est du travail de contenu/design restant, pas un manque d'agent logic.
+**État d'implémentation des templates** (`agents/creation_site/templates/sectors/`) : les 10
+templates du catalogue sont construits (les 9 secteurs + le générique de repli). Chacun
+réutilise la structure commune (`base.html.jinja`) avec un libellé de section adapté au
+secteur (ex. "Notre menu" pour restaurant, "Nos produits" pour boutique). Le repli
+automatique vers le générique reste actif comme filet de sécurité (`render.py`) si un
+secteur venait à perdre son template dédié.
 
 ## Génération et publication (tranché)
 
@@ -70,29 +72,48 @@ dédié — c'est du travail de contenu/design restant, pas un manque d'agent lo
   via `SiteContent` (pydantic), erreur explicite (`ContentGenerationError`) si la réponse ne
   correspond pas au schéma attendu.
 - `render.py` : `render_site(brief, content)` — rendu Jinja2, repli automatique vers le
-  template générique si le secteur n'a pas encore de template dédié.
-- `publish.py` : `write_draft(site_id, html)` — écrit le brouillon **en local** pour
-  l'instant (`output/draft/<site_id>/index.html`), en attendant le branchement réel sur
-  Cloudflare R2 (voir point ouvert ci-dessous).
+  template générique si le secteur n'a pas de template dédié.
+- `storage.py` : `upload_draft(site_id, html)` / `promote_to_live(site_id)` — upload réel
+  vers Cloudflare R2 (API compatible S3 via `boto3`), préfixes `draft/<site_id>/` et
+  `live/<site_id>/`. Client S3 injectable pour les tests (pas de credentials réels requis
+  pour lancer la suite).
 - `agent.py` : `generate_draft_site(site_id, brief)` — enchaîne les trois étapes ; le
   contenu structuré (pas le HTML) est la source de vérité stockée en base
   (`platform_core.models.Site.content`), le HTML est régénérable à tout moment.
-- Exposé via l'API (`app/routers/sites.py`) : `POST /api/sites` (créer), `POST
-  /api/sites/{id}/generate` (générer le brouillon), `GET /api/sites/{id}/preview`
-  (prévisualiser), `POST /api/sites/{id}/publish` (valider → `SiteStatus.published`).
-- Testé : génération de contenu (avec client Claude simulé, sans appel réseau réel), rendu
-  Jinja2, et le flux complet créer→générer→prévisualiser→publier via l'API (voir `tests/`).
+- Exposé via l'API, avec authentification par clé API (voir ci-dessous) :
+  `app/routers/sites.py` — `POST /api/sites` (créer), `POST /api/sites/{id}/generate`
+  (générer le brouillon), `GET /api/sites/{id}/preview` (prévisualiser), `POST
+  /api/sites/{id}/publish` (valider → promotion R2 `draft/` → `live/` →
+  `SiteStatus.published`).
+- Testé : génération de contenu (client Claude simulé), rendu Jinja2 (les 10 templates +
+  filet de sécurité de repli), stockage R2 (client S3 simulé), authentification (génération/
+  vérification de clé), et le flux complet créer→générer→prévisualiser→publier via l'API
+  (voir `tests/`) — aucun appel réseau réel dans la suite de tests.
+
+## Authentification et cloisonnement (tranché)
+
+- **Clé API par client** (`platform_core/auth.py`) : clé aléatoire à haute entropie
+  (`secrets.token_urlsafe`), hachée en SHA-256 avant stockage (`Client.api_key_hash`).
+  SHA-256 est correct ici — pas bcrypt/argon2 — car la clé est déjà un secret à haute
+  entropie généré par la plateforme, pas un mot de passe humain à faible entropie.
+- `POST /api/clients` crée un client et retourne sa clé API **une seule fois** (convention
+  standard, comme Stripe/GitHub) — jamais récupérable ensuite.
+- Tous les endpoints `app/routers/sites.py` exigent `Authorization: Bearer <clé API>`
+  (`app/auth.py::get_current_client`) et vérifient que le site demandé appartient bien au
+  client authentifié (`_get_owned_site`, 403 sinon) — c'est le cloisonnement strict entre
+  clients exigé par CLAUDE.md §5, pas seulement entre agents.
+- **Portée volontairement limitée** : ceci authentifie un *client* de la plateforme pour ses
+  propres endpoints, pas un login humain avec session pour le dashboard (formulaire de
+  connexion, mot de passe, "mot de passe oublié"...) — ce dernier reste à concevoir
+  séparément et pourra s'appuyer sur ce même modèle `Client`.
 
 ## Points à trancher avant implémentation
 
-- Remplacer `write_draft` (écriture locale) par un vrai upload Cloudflare R2 (préfixe
-  `draft/<site_id>/`) et implémenter `promote_to_live` (copie `draft/` → `live/` à la
-  validation) — nécessite des credentials R2 réels pour être testé, pas fait à ce stade
-  (voir TODO dans `publish.py`).
-- Authentification/autorisation des endpoints `app/routers/sites.py` : pour l'instant
-  n'importe qui peut appeler `/publish` sur n'importe quel site — pas encore de notion
-  d'utilisateur/session, à construire avec le reste du dashboard.
-- Construire les templates dédiés des 7 secteurs restants (actuellement repli générique).
+- Login humain pour le dashboard (au-delà de la clé API machine-à-machine ci-dessus) : reste
+  à concevoir avec le reste du dashboard (CLAUDE.md §3, HTMX/Jinja2/Alpine).
+- Vérification de connectivité réelle à R2 : le code d'upload est écrit et testé avec un
+  client S3 simulé, mais n'a pas été exécuté contre un vrai bucket R2 (credentials non
+  disponibles à ce stade) — à valider dès que `config/credentials/.env` est renseigné.
 
 ## Rappel des permissions (voir CLAUDE.md §5)
 
