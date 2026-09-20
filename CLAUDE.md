@@ -244,7 +244,11 @@ hors packs — voir §2 "Agent Planning").
    voir `agents/prospection/skills/README.md`). Les endpoints staff de l'agent Planning
    (`/api/planning/clients/*`, `/api/planning/appointments`) réutilisent le même
    `OPS_API_TOKEN` que Maintenance ; les endpoints `/api/planning/me/*` utilisent la clé API
-   du client comme les autres agents.
+   du client comme les autres agents. Pour chiffrer au repos ces tokens (`meta_page_access_
+   token`/`whatsapp_access_token`), renseigner `TOKEN_ENCRYPTION_KEY` (sinon stockage en
+   clair, dégradation explicite). Pour vérifier la signature des webhooks Sentry entrants
+   (`/api/maintenance/webhooks/sentry`), renseigner `SENTRY_WEBHOOK_SECRET` (sinon
+   vérification ignorée). Voir `config/credentials/README.md` pour le détail des deux.
 2. Installer les dépendances (Python ≥ 3.12) : `pip install -e ".[dev]"`
 3. Appliquer les migrations : `alembic upgrade head`
 4. Lancer l'app : `uvicorn app.main:app --reload`, puis ouvrir `http://localhost:8000`

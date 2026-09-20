@@ -76,9 +76,9 @@ communiquer clairement au client dans les conditions d'utilisation du pack.
 - **Sentry** : l'app elle-même est instrumentée (`app/main.py`, `sentry_sdk.init`), donc les
   erreurs réelles de la plateforme remontent dans Sentry. Le seuil "≥5 fois en 1h" **vit
   dans une règle d'alerte Sentry** (pas réimplémenté ici) ; `POST /api/maintenance/webhooks/
-  sentry` reçoit cette alerte et crée une `Notification`. **Vérification de signature du
-  webhook non implémentée** — voir points ouverts, c'est une vraie faille à corriger avant
-  un déploiement réel (n'importe qui pourrait injecter de fausses alertes).
+  sentry` reçoit cette alerte et crée une `Notification`. Signature HMAC-SHA256 du webhook
+  vérifiée (`Sentry-Hook-Signature`, `SENTRY_WEBHOOK_SECRET`) — dégradée en no-op (comme
+  avant) si le secret n'est pas configuré, comportement documenté et testé.
 - Modèles ajoutés : `Notification` (catégorie/sévérité/statut), `Backup`, `RestoreRequest`.
 - Endpoints (`app/routers/maintenance.py`), protégés par un jeton d'opération partagé —
   **stopgap explicite**, pas un vrai système d'auth staff (voir `app/auth.py::
@@ -96,8 +96,6 @@ communiquer clairement au client dans les conditions d'utilisation du pack.
   sécurité et vérifications de disponibilité automatiquement — pour l'instant, tout se
   déclenche via un appel manuel à l'API (`POST /api/maintenance/backups`, etc.), même
   limite que la planification des publications de l'agent Réseaux sociaux.
-- **Vérification de signature du webhook Sentry** — actuellement n'importe qui peut appeler
-  `POST /api/maintenance/webhooks/sentry` et injecter une fausse alerte.
 - **Vraie authentification staff** — le jeton d'opération partagé (`OPS_API_TOKEN`) n'est
   qu'un verrou minimal, pas un système avec comptes individuels/rôles/audit par utilisateur.
 - Vérification de connectivité réelle : `pg_dump`/`psql` (Postgres), R2 et UptimeRobot n'ont

@@ -855,3 +855,63 @@ Format d'entrée suggéré :
 - Toutes les questions ouvertes des agents précédents restent valables — voir les entrées
   précédentes (tâches planifiées réelles, flux OAuth Meta, login humain du dashboard, devis
   BSP/Moov Money, prix d'abonnement final, etc.).
+
+## 2026-09-20 — "Réalise le non fait" : deux failles de sécurité corrigées
+
+**Contexte** : demande explicite de traiter les éléments accumulés en "points ouverts" dans
+les 5 `skills/README.md`. Périmètre trop large pour tout traiter d'un coup ; ce lot se
+concentre sur les deux corrections de sécurité les plus simples et les plus importantes,
+annoncées à l'utilisateur avant de commencer.
+
+**Chiffrement au repos des tokens clients**
+- `platform_core/encryption.py` : `encrypt_token`/`decrypt_token` (Fernet, `cryptography`).
+  Dégradation explicite en passe-plat (retourne la valeur telle quelle) si
+  `TOKEN_ENCRYPTION_KEY` n'est pas configurée — pour ne jamais casser le développement local
+  ni la suite de tests existante, mais à combler impérativement avant une vraie mise en
+  production (documenté dans `config/credentials/README.md`).
+- `platform_core/models.py` : nouveau `EncryptedString` (`TypeDecorator` SQLAlchemy autour
+  de `String`), appliqué à `Client.meta_page_access_token` et `Client.whatsapp_access_token`
+  (longueur doublée, 500→1000, pour absorber le surcoût du ciphertext Fernet). Transparent
+  pour tout le code applicatif existant (Réseaux sociaux, Prospection) : il continue de
+  lire/écrire du texte en clair, seule la colonne SQL change.
+- Migration `159f376bd70b` : `alter_column` sur les deux colonnes, dans un
+  `batch_alter_table` (nécessaire pour que ça fonctionne aussi sur SQLite en test, qui ne
+  supporte pas `ALTER COLUMN ... TYPE` directement — sans effet sur PostgreSQL). Vérifiée
+  upgrade et downgrade sur une base SQLite fraîche.
+- Testé : passe-plat sans clé, aller-retour chiffrement/déchiffrement avec une vraie clé
+  Fernet générée, échec de déchiffrement avec la mauvaise clé (`TokenDecryptionError`), et
+  vérification que la valeur brute stockée en base (lue en contournant l'ORM) n'est jamais
+  le texte en clair.
+
+**Signature HMAC du webhook Sentry**
+- `app/routers/maintenance.py::_sentry_signature_is_valid` : vérifie l'en-tête
+  `Sentry-Hook-Signature` par HMAC-SHA256 du corps brut de la requête (`hmac.compare_digest`,
+  pas de comparaison naïve pour éviter une attaque par timing), avec le secret
+  `SENTRY_WEBHOOK_SECRET`. Corps lu via `await request.body()` avant tout parsing JSON (le
+  HMAC porte sur les octets exacts envoyés par Sentry, pas sur une reconstruction).
+- Même principe de dégradation explicite : si `SENTRY_WEBHOOK_SECRET` n'est pas configuré,
+  la vérification est ignorée (comportement précédent, non sécurisé mais documenté) plutôt
+  que de rejeter tout webhook tant que le secret n'est pas en place.
+- Testé : webhook accepté avec une signature valide, rejeté (401) avec une signature
+  invalide ou absente quand le secret est configuré, comportement inchangé (accepté) sans
+  secret configuré — aucune régression sur le test existant.
+
+**Divers**
+- Ajout de `cryptography` (chiffrement) et `apscheduler` (à venir : tâches planifiées) aux
+  dépendances du projet.
+- Environnement de dev reconstruit dans un vrai virtualenv Python 3.12 (`.venv/`, gitignoré)
+  — le conteneur de cette session n'avait pas d'environnement préexistant malgré les commits
+  précédents ; `pip install -e ".[dev]"` échouait avec `python3` (3.11) car
+  `requires-python = ">=3.12"`.
+- 107 tests au total (contre 100 avant ce lot), tous passent. Packaging non-éditable
+  revérifié dans un nouveau `/tmp/test-install-venv` : imports et démarrage de l'app OK.
+
+**Questions ouvertes restantes (non traitées dans ce lot)**
+- Infrastructure de planification (APScheduler) pour débloquer : auto-publication des posts
+  programmés (Réseaux sociaux), tâches récurrentes backup/rétention/scan sécurité/uptime
+  (Maintenance), rappels de RDV (Planning). Dépendance déjà ajoutée, câblage pas encore fait.
+- Instrumentation `ActivityEvent` manquante pour Création de site et Réseaux sociaux (seul
+  Prospection émet des événements pour l'instant).
+- Toutes les autres questions ouvertes des entrées précédentes restent valables (génération
+  de visuels Pillow, export PowerPoint des offres, recherche Meta Graph API, scan d'en-têtes
+  HTTP des sites clients, vrai système de comptes staff, flux OAuth Meta/WhatsApp, etc.).

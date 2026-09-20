@@ -1,3 +1,6 @@
+import hashlib
+import hmac
+import json
 import uuid
 from datetime import UTC, datetime
 
@@ -8,8 +11,15 @@ from sqlalchemy.orm import Session
 from agents.maintenance import backup as backup_module
 from agents.maintenance import restore as restore_module
 from app.auth import require_ops_token
+from platform_core.config import settings
 from platform_core.db import get_db
-from platform_core.models import Backup, Notification, NotificationCategory, NotificationSeverity, NotificationStatus
+from platform_core.models import (
+    Backup,
+    Notification,
+    NotificationCategory,
+    NotificationSeverity,
+    NotificationStatus,
+)
 
 router = APIRouter(
     prefix="/api/maintenance",
@@ -73,7 +83,7 @@ def trigger_backup(db: Session = Depends(get_db)) -> dict:
         dump = backup_module.create_backup()
         timestamp = datetime.now(UTC)
         key = backup_module.upload_backup(dump, timestamp)
-    except Exception as exc:  # noqa: BLE001 — toute panne de backup doit notifier, jamais échouer en silence
+    except Exception as exc:
         notification = Notification(
             category=NotificationCategory.backup_failure,
             severity=NotificationSeverity.critical,
@@ -133,19 +143,38 @@ def execute_restore(restore_request_id: uuid.UUID, db: Session = Depends(get_db)
 sentry_webhook_router = APIRouter(prefix="/api/maintenance", tags=["maintenance"])
 
 
+def _sentry_signature_is_valid(raw_body: bytes, signature_header: str | None) -> bool:
+    """Vérifie la signature HMAC-SHA256 du webhook Sentry (en-tête `Sentry-Hook-Signature`,
+    calculée par Sentry comme hex(HMAC-SHA256(corps brut, client secret))).
+
+    Dégradation explicite : si `sentry_webhook_secret` n'est pas configuré, la vérification
+    est ignorée (retourne True) — comportement précédent, non sécurisé mais nécessaire pour
+    ne pas bloquer tout webhook tant que le secret n'a pas été renseigné (voir
+    config/credentials/README.md). À combler impérativement avant un vrai déploiement.
+    """
+    if not settings.sentry_webhook_secret:
+        return True
+    if not signature_header:
+        return False
+    expected = hmac.new(settings.sentry_webhook_secret.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected, signature_header)
+
+
 @sentry_webhook_router.post("/webhooks/sentry", status_code=202)
 async def receive_sentry_webhook(request: Request, db: Session = Depends(get_db)) -> dict:
     """Reçoit les alertes Sentry (règle d'alerte configurée côté Sentry, ex. "même erreur
     >= 5 fois en 1h" — le seuil lui-même vit dans Sentry, pas réimplémenté ici).
 
-    Pas d'authentification ici : Sentry appelle cet endpoint directement et son propre
-    mécanisme de vérification (signature HMAC du payload) n'est **pas implémenté** — à faire
-    avant un vrai déploiement, sans quoi n'importe qui peut injecter de fausses alertes.
-    Parsing best-effort : le schéma exact du payload Sentry n'a pas été vérifié contre la
-    documentation à jour dans cette session (voir agents/maintenance/security_scan.py pour
-    une note similaire sur pip-audit).
+    Signature HMAC vérifiée via `Sentry-Hook-Signature` (voir `_sentry_signature_is_valid`)
+    quand `sentry_webhook_secret` est configuré. Parsing best-effort : le schéma exact du
+    payload Sentry n'a pas été vérifié contre la documentation à jour dans cette session
+    (voir agents/maintenance/security_scan.py pour une note similaire sur pip-audit).
     """
-    payload = await request.json()
+    raw_body = await request.body()
+    if not _sentry_signature_is_valid(raw_body, request.headers.get("Sentry-Hook-Signature")):
+        raise HTTPException(status_code=401, detail="Signature Sentry invalide")
+
+    payload = json.loads(raw_body) if raw_body else {}
     message = payload.get("data", {}).get("event", {}).get("message") or payload.get("message") or "Alerte Sentry (détail non extrait)"
     level = (payload.get("data", {}).get("event", {}).get("level") or "warning").lower()
     severity = NotificationSeverity.critical if level in {"error", "fatal"} else NotificationSeverity.warning

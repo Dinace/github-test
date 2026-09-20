@@ -6,8 +6,10 @@ from sqlalchemy import JSON, DateTime, ForeignKey, String
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.types import TypeDecorator
 
 from platform_core.db import Base
+from platform_core.encryption import decrypt_token, encrypt_token
 
 
 def _utcnow() -> datetime:
@@ -21,6 +23,25 @@ def _utcnow() -> datetime:
 # SQL, cassant tout filtre `.is_(None)`/`.isnot(None)` (découvert via agents/planning/
 # dashboard.py, qui filtre justement sur Site.content IS NOT NULL).
 _JSONB = JSON(none_as_null=True).with_variant(JSONB(none_as_null=True), "postgresql")
+
+
+class EncryptedString(TypeDecorator):
+    """Colonne `String` chiffrée au repos (Fernet, voir platform_core/encryption.py).
+
+    Chiffre/déchiffre de façon transparente pour le code applicatif (qui manipule toujours
+    le texte en clair) ; c'est la valeur stockée en base qui est le ciphertext. Longueur
+    doublée par rapport à la colonne en clair pour absorber le surcoût du chiffrement Fernet
+    (base64 + IV + HMAC).
+    """
+
+    impl = String
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        return encrypt_token(value)
+
+    def process_result_value(self, value, dialect):
+        return decrypt_token(value)
 
 
 class Pack(str, Enum):
@@ -54,12 +75,15 @@ class Client(Base):
     # devient sensible en pratique (c'est un token appartenant au client, pas un secret
     # plateforme, mais un durcissement reste souhaitable avant une vraie mise en prod).
     meta_page_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    meta_page_access_token: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # Chiffré au repos (EncryptedString, voir plus haut) : ce sont des tokens d'accès
+    # permettant de publier au nom du client, pas de simples identifiants. Longueur 1000
+    # (vs 500 en clair) pour absorber le surcoût du ciphertext Fernet.
+    meta_page_access_token: Mapped[str | None] = mapped_column(EncryptedString(1000), nullable=True)
     # Connexion WhatsApp Business Cloud API du client (agent Prospection, premier contact).
-    # Même limite que meta_page_access_token : renseignés manuellement, pas de flux de
-    # connexion automatisé, stockage en clair à durcir avant une vraie mise en production.
+    # Renseignés manuellement, pas de flux de connexion automatisé (voir
+    # agents/prospection/skills/README.md).
     whatsapp_phone_number_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    whatsapp_access_token: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    whatsapp_access_token: Mapped[str | None] = mapped_column(EncryptedString(1000), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
     subscription: Mapped["Subscription | None"] = relationship(back_populates="client", uselist=False)

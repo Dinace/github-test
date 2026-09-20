@@ -34,5 +34,18 @@ class Settings(BaseSettings):
     # la recherche d'AUTRES établissements pour la prospection).
     google_places_api_key: str = ""
 
+    # Chiffrement au repos des tokens sensibles stockés en base (Client.meta_page_access_token,
+    # Client.whatsapp_access_token — voir platform_core/encryption.py). Clé Fernet
+    # (`Fernet.generate_key()`), 44 caractères base64. Vide par défaut : dégradation
+    # explicite en clair (pas de crash), pour ne pas casser le développement local/les tests
+    # tant que la clé n'est pas configurée — mais à renseigner impérativement en production.
+    token_encryption_key: str = ""
+
+    # Secret partagé pour vérifier la signature HMAC des webhooks Sentry entrants
+    # (app/routers/maintenance.py, en-tête `Sentry-Hook-Signature`). Vide par défaut : la
+    # vérification est alors ignorée (comportement précédent, documenté comme non sécurisé)
+    # plutôt que de rejeter tous les webhooks tant que le secret n'est pas configuré.
+    sentry_webhook_secret: str = ""
+
 
 settings = Settings()

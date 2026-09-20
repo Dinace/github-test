@@ -70,7 +70,9 @@ n'est pas confirmée — la clé reste documentée dans `config/credentials/` sa
   (409 si l'action ne correspond pas au statut courant) — aucun raccourci possible, comme
   décidé ci-dessus.
 - Connexion Meta du client : `Client.meta_page_id` / `Client.meta_page_access_token`,
-  renseignés manuellement pour l'instant (voir points ouverts).
+  renseignés manuellement pour l'instant (voir points ouverts). Le token est chiffré au
+  repos (`platform_core.models.EncryptedString`, voir `platform_core/encryption.py`) —
+  transparent pour ce module, qui continue de lire/écrire du texte en clair côté code.
 - Testé : génération de contenu (client Claude simulé), publication Meta (client HTTP
   simulé), et le flux complet create→generate→request-changes→generate→validate→schedule→
   publish via l'API (voir `tests/`) — aucun appel réseau réel dans la suite de tests.
@@ -87,8 +89,6 @@ n'est pas confirmée — la clé reste documentée dans `config/credentials/` sa
   le brief mais rien ne consomme un visuel généré ou fourni pour l'instant.
 - WhatsApp Business : flux de messagerie (opt-in, templates approuvés) à concevoir
   séparément, différent d'une "publication" (voir `meta.py`).
-- Chiffrement au repos de `Client.meta_page_access_token` (actuellement en clair en base) —
-  durcissement souhaitable avant une vraie mise en production.
 
 ## Rappel des permissions (voir CLAUDE.md §5)
 

@@ -1,3 +1,6 @@
+import hashlib
+import hmac
+import json
 from collections.abc import Iterator
 
 import pytest
@@ -9,7 +12,12 @@ from agents.maintenance import backup as backup_module
 from app.main import app
 from platform_core.config import settings
 from platform_core.db import Base, get_db
-from platform_core.models import Backup, Notification, NotificationCategory, NotificationSeverity
+from platform_core.models import (
+    Backup,
+    Notification,
+    NotificationCategory,
+    NotificationSeverity,
+)
 
 
 @pytest.fixture()
@@ -162,3 +170,47 @@ def test_sentry_webhook_creates_notification_without_ops_token(db_session: Sessi
     )
 
     assert resp.status_code == 202
+
+
+def test_sentry_webhook_accepts_valid_signature(db_session: Session, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "sentry_webhook_secret", "test-sentry-secret")
+    client = TestClient(app)
+    body = json.dumps({"data": {"event": {"message": "TypeError", "level": "error"}}}).encode("utf-8")
+    signature = hmac.new(b"test-sentry-secret", body, hashlib.sha256).hexdigest()
+
+    resp = client.post(
+        "/api/maintenance/webhooks/sentry",
+        content=body,
+        headers={"Content-Type": "application/json", "Sentry-Hook-Signature": signature},
+    )
+
+    assert resp.status_code == 202
+
+
+def test_sentry_webhook_rejects_invalid_signature(db_session: Session, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "sentry_webhook_secret", "test-sentry-secret")
+    client = TestClient(app)
+    body = json.dumps({"data": {"event": {"message": "TypeError", "level": "error"}}}).encode("utf-8")
+
+    resp = client.post(
+        "/api/maintenance/webhooks/sentry",
+        content=body,
+        headers={"Content-Type": "application/json", "Sentry-Hook-Signature": "0" * 64},
+    )
+
+    assert resp.status_code == 401
+    assert db_session.query(Notification).count() == 0
+
+
+def test_sentry_webhook_rejects_missing_signature_when_secret_configured(
+    db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "sentry_webhook_secret", "test-sentry-secret")
+    client = TestClient(app)
+
+    resp = client.post(
+        "/api/maintenance/webhooks/sentry",
+        json={"data": {"event": {"message": "TypeError", "level": "error"}}},
+    )
+
+    assert resp.status_code == 401
