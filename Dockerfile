@@ -8,6 +8,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 COPY pyproject.toml ./
 COPY platform_core ./platform_core
 COPY app ./app
+COPY agents ./agents
 COPY migrations ./migrations
 COPY alembic.ini ./
 

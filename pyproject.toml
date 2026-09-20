@@ -15,12 +15,12 @@ dependencies = [
     "python-multipart>=0.0.9",
     "anthropic>=0.40",
     "boto3>=1.34",
+    "httpx>=0.27",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
-    "httpx>=0.27",
     "ruff>=0.6",
 ]
 
@@ -29,4 +29,18 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["platform_core*", "app*"]
+# "agents*" ajouté ici : sans lui, le package n'est pas enregistré par `pip install .`
+# (fonctionnait quand même en dev/test uniquement parce que le répertoire courant se
+# retrouve sur sys.path dans ce cas précis — fragile, corrigé pour que ce soit vrai aussi
+# dans l'image Docker buildée avec `pip install .`, voir Dockerfile).
+include = ["platform_core*", "app*", "agents*"]
+
+[tool.setuptools.package-data]
+# setuptools n'inclut par défaut que les fichiers .py d'un package : sans cette section, les
+# templates Jinja2 (fichiers non-Python) sont silencieusement absents de `pip install .` —
+# bug confirmé en testant une installation non-éditable depuis un répertoire externe.
+"agents.creation_site" = ["templates/*.jinja", "templates/sectors/*.jinja"]
+# ".gitkeep" listé explicitement : un glob "*" ne capture pas les fichiers commençant par un
+# point, et app.main monte StaticFiles(directory=...) qui plante au démarrage si le dossier
+# "static" n'existe pas du tout (aujourd'hui vide à part ce fichier placeholder).
+"app" = ["templates/*.html", "static/*", "static/.gitkeep"]

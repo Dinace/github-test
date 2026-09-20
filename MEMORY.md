@@ -585,3 +585,72 @@ Format d'entrée suggéré :
 - Concevoir le login humain du dashboard (au-delà de la clé API machine-à-machine).
 - Implémenter les 3 autres agents (Réseaux sociaux, Maintenance, Prospection).
 - Devis direct BSP (WhatsApp), contact Moov Money Gabon, prix d'abonnement final — inchangé.
+
+---
+
+## 2026-09-20 — Agent Réseaux sociaux implémenté + deux bugs de packaging corrigés
+
+**Décisions techniques**
+- **Agent Réseaux sociaux** (`agents/reseaux_sociaux/`) implémenté selon la conception déjà
+  actée : `brief.py` (`PostBrief`/`PostObjective`), `content.py` (génération du texte de
+  publication via API Claude directe — même correction que Création de site, pas le Agent
+  SDK), `meta.py` (publication réelle sur Meta Graph API via `httpx`, `MetaPublishError`
+  explicite). **WhatsApp volontairement non implémenté** : ce n'est pas une "publication"
+  au sens réseau social (canal de messagerie à opt-in avec templates approuvés, flux
+  différent) — décision de ne pas le faire à moitié plutôt que de fabriquer un faux
+  fonctionnement.
+- Nouveau modèle `Post` (statuts stricts : `draft` → `pending_validation` → `validated` →
+  `scheduled` → `published`, aucun raccourci, conforme au workflow déjà documenté) et
+  nouveaux champs `Client.brand_voice`/`meta_page_id`/`meta_page_access_token` (migration
+  Alembic dédiée, nettoyée du même bruit SQLite que les migrations précédentes).
+- Endpoints `app/routers/posts.py` (create/generate/request-changes/validate/schedule/
+  publish), authentifiés et cloisonnés par client comme `sites.py` ; `publish` renvoie 412
+  si le client n'a pas connecté sa Page Meta plutôt que d'échouer silencieusement.
+- **Deux bugs de packaging découverts et corrigés en testant une vraie installation non-
+  éditable** (`pip install .` depuis un répertoire externe, pour simuler ce qui se passe
+  réellement dans l'image Docker construite avec la même commande) :
+  1. `agents*` manquait de `[tool.setuptools.packages.find]` — le package n'était jamais
+     enregistré par `pip install .` ; ça fonctionnait seulement en dev parce que le
+     répertoire courant se retrouve sur `sys.path` dans ce cas précis (fragile, invisible
+     tant qu'on ne teste que via `pytest`/`pip install -e .` depuis la racine du repo).
+  2. setuptools n'inclut par défaut que les fichiers `.py` d'un package : les templates
+     Jinja2 (`agents/creation_site/templates/*.jinja`) et les fichiers de `app/templates`/
+     `app/static` étaient absents d'une installation non-éditable, sans erreur au moment de
+     l'install — seulement au runtime. Pire : `app/static` ne contenant que `.gitkeep`, le
+     dossier n'existait pas du tout après installation, et `StaticFiles(directory=...)`
+     plante au démarrage si ce dossier est absent (`app.main` n'aurait jamais démarré dans
+     l'image Docker). Corrigé avec `[tool.setuptools.package-data]`.
+  3. `Dockerfile` ne copiait jamais `agents/`, et `.dockerignore` l'excluait explicitement
+     en plus — l'image de production n'aurait jamais contenu le code des agents. Corrigé
+     (`.dockerignore` exclut maintenant seulement `agents/*/skills/`, la documentation, pas
+     le code).
+  Validé concrètement : install non-éditable dans un venv propre + import + `TestClient`
+  depuis `/tmp` (le daemon Docker n'est pas disponible dans cet environnement pour un vrai
+  `docker build`, ce test est l'équivalent le plus proche possible).
+- 35 tests au total (contre 24 avant cette session), tous passent, toujours aucun appel
+  réseau réel (Claude, R2 et Meta tous simulés dans les tests).
+
+**État d'avancement par agent**
+- Réseaux sociaux : fonctionnellement complet pour le MVP côté Meta (génération, workflow
+  de validation à 5 statuts, publication réelle). WhatsApp explicitement hors périmètre pour
+  l'instant. Restent : flux OAuth de connexion Meta, vraie planification automatique
+  (actuellement `/publish` est un appel manuel, rien ne le déclenche à `scheduled_at`),
+  génération de visuels (Pillow, non commencée).
+- Maintenance et Prospection : conception seulement, aucun code.
+
+**Problèmes rencontrés / solutions**
+- Voir les 3 bugs de packaging ci-dessus, découverts uniquement parce qu'un test
+  d'installation non-éditable depuis un répertoire externe a été fait spontanément (aucun
+  des deux ne remontait dans `pytest` classique, qui masque le problème par construction).
+
+**Questions ouvertes**
+- Construire une vraie tâche planifiée (Celery beat/APScheduler) qui déclenche `/publish`
+  à `scheduled_at`, au lieu d'un appel manuel.
+- Flux OAuth de connexion Meta (Facebook Login, sélection de Page, refresh de token).
+- Génération de visuels (Pillow) — pas commencée.
+- Chiffrement au repos de `Client.meta_page_access_token`.
+- Implémenter Maintenance et Prospection.
+- Vérifier un vrai `docker build`/`fly deploy` dès qu'un environnement avec Docker actif ou
+  un compte Fly.io est disponible — validé seulement par équivalent (install non-éditable)
+  ici.
+- Devis direct BSP (WhatsApp), contact Moov Money Gabon, prix d'abonnement final — inchangé.

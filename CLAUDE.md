@@ -84,9 +84,9 @@ Noms de dossiers en snake_case (et non kebab-case comme dans les premières vers
 document) : ce sont aussi des packages Python valides, importables directement (ex.
 `agents.creation_site`).
 
-`agents/creation_site/` contient désormais aussi du code (premier agent implémenté — voir
-`agents/creation_site/skills/README.md` section "Implémentation actuelle"). Les 3 autres
-agents n'ont encore que leur `skills/README.md` (conception, pas de code).
+`agents/creation_site/` et `agents/reseaux_sociaux/` contiennent désormais aussi du code
+(voir leurs `skills/README.md`, section "Implémentation actuelle"). Maintenance et
+Prospection n'ont encore que leur `skills/README.md` (conception, pas de code).
 
 Chaque `skills/README.md` documente les skills/frameworks/librairies retenus pour l'agent
 concerné, avec justification, points encore à trancher, et rappel des permissions qui lui
@@ -203,10 +203,10 @@ intervient sur le code du projet lui-même.
 ## 6. Lancer et tester le projet en local
 
 Scaffolding applicatif créé : package partagé `platform_core/` (config, accès DB, modèles),
-app FastAPI + dashboard dans `app/`, migrations Alembic dans `migrations/`. Premier agent
-implémenté : Création de site (`agents/creation_site/`, voir son `skills/README.md`). Les 3
-autres agents n'ont encore que leur conception (`agents/<nom-agent>/skills/README.md`), pas
-de code.
+app FastAPI + dashboard dans `app/`, migrations Alembic dans `migrations/`. Agents
+implémentés : Création de site et Réseaux sociaux (`agents/creation_site/`,
+`agents/reseaux_sociaux/`, voir leurs `skills/README.md`). Maintenance et Prospection n'ont
+encore que leur conception (`agents/<nom-agent>/skills/README.md`), pas de code.
 
 1. Copier `config/credentials/.env.example` vers `config/credentials/.env` et renseigner au
    minimum `DATABASE_URL` (PostgreSQL local ou distant). Pour utiliser réellement l'agent
@@ -214,13 +214,16 @@ de code.
    `CLOUDFLARE_ACCOUNT_ID` (stockage des sites générés). La clé API Claude n'est **jamais**
    placée ici : elle est fournie à l'exécution par la variable d'environnement standard
    `ANTHROPIC_API_KEY`, définie hors dépôt (nécessaire uniquement pour appeler réellement
-   `POST /api/sites/{id}/generate`).
+   `POST /api/sites/{id}/generate` ou `POST /api/posts/{id}/generate`). Pour publier
+   réellement via l'agent Réseaux sociaux, `Client.meta_page_id`/`meta_page_access_token`
+   doivent être renseignés manuellement en base (pas de flux OAuth de connexion pour
+   l'instant — voir `agents/reseaux_sociaux/skills/README.md`).
 2. Installer les dépendances (Python ≥ 3.12) : `pip install -e ".[dev]"`
 3. Appliquer les migrations : `alembic upgrade head`
 4. Lancer l'app : `uvicorn app.main:app --reload`, puis ouvrir `http://localhost:8000`
    (`/healthz` pour vérifier que l'app répond). Créer un client via `POST /api/clients`
-   (retourne une clé API à conserver) pour appeler ensuite les endpoints `/api/sites/*` avec
-   `Authorization: Bearer <clé API>`.
+   (retourne une clé API à conserver) pour appeler ensuite les endpoints `/api/sites/*` et
+   `/api/posts/*` avec `Authorization: Bearer <clé API>`.
 5. Lancer les tests : `pytest` — aucun appel réseau réel (ni API Claude, ni R2 : les deux
    sont simulés dans les tests), aucune clé/credential nécessaire pour lancer la suite.
 

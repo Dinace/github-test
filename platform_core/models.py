@@ -41,6 +41,16 @@ class Client(Base):
     # (voir platform_core/auth.py pour la justification du choix SHA-256 plutôt que
     # bcrypt/argon2 dans ce cas précis).
     api_key_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    # Ton/voix de marque, défini une fois à l'onboarding (agents/reseaux_sociaux/skills/
+    # README.md) et réutilisé pour chaque génération de contenu réseaux sociaux.
+    brand_voice: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # Connexion Meta (Facebook/Instagram) du client — renseignés manuellement pour l'instant,
+    # le flux OAuth de connexion n'est pas implémenté (agents/reseaux_sociaux/skills/
+    # README.md, "points à trancher"). Stockage en clair : à chiffrer au repos si ce champ
+    # devient sensible en pratique (c'est un token appartenant au client, pas un secret
+    # plateforme, mais un durcissement reste souhaitable avant une vraie mise en prod).
+    meta_page_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    meta_page_access_token: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
     subscription: Mapped["Subscription | None"] = relationship(back_populates="client", uselist=False)
@@ -90,6 +100,36 @@ class Site(Base):
     brief: Mapped[dict] = mapped_column(_JSONB)
     content: Mapped[dict | None] = mapped_column(_JSONB, nullable=True)
     status: Mapped[SiteStatus] = mapped_column(SAEnum(SiteStatus, name="site_status_enum"), default=SiteStatus.draft)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    client: Mapped["Client"] = relationship()
+
+
+class PostStatus(str, Enum):
+    draft = "draft"
+    pending_validation = "pending_validation"
+    validated = "validated"
+    scheduled = "scheduled"
+    published = "published"
+
+
+class Post(Base):
+    """Publication réseaux sociaux pour un client, gérée par l'agent Réseaux sociaux.
+
+    Workflow à statuts strict (agents/reseaux_sociaux/skills/README.md), aucun raccourci :
+    draft -> pending_validation -> validated -> scheduled -> published. Seule la transition
+    validated -> published (via /publish) déclenche l'appel réel à l'API Meta.
+    """
+
+    __tablename__ = "posts"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    client_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("clients.id"))
+    brief: Mapped[dict] = mapped_column(_JSONB)
+    content: Mapped[dict | None] = mapped_column(_JSONB, nullable=True)
+    status: Mapped[PostStatus] = mapped_column(SAEnum(PostStatus, name="post_status_enum"), default=PostStatus.draft)
+    scheduled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
     published_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 

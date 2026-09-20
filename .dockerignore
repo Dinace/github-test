@@ -6,6 +6,6 @@ venv/
 .gitignore
 config/
 docs/
-agents/
 tests/
 *.md
+agents/*/skills/
