@@ -24,7 +24,7 @@ utilisée en production, pour permettre une revue de conformité par l'équipe.
 |---|---|---|
 | **httpx / requests + BeautifulSoup** | Collecte de données publiques simples (pages web statiques, annuaires professionnels). | Suffisant pour des sources HTML classiques, léger, largement documenté en Python. |
 | **Playwright** | Collecte sur des pages nécessitant du JavaScript (rendu dynamique). | À utiliser seulement si BeautifulSoup ne suffit pas — plus lourd, réservé aux sources qui l'exigent réellement. |
-| **Claude Agent SDK — extraction/structuration** | Transformer les données brutes collectées en fiche prospect structurée (nom, secteur, contact, besoins probables). | Cohérent avec l'orchestration globale du projet ; utile pour normaliser des données hétérogènes selon la source. |
+| **API Claude directe** (SDK `anthropic`, modèle `claude-sonnet-5`) | Transformer les données brutes collectées en fiche prospect structurée, et rédiger le message de premier contact. | **Correction** : même raisonnement que les 3 autres agents (agents/creation_site/skills/README.md) — structurer des données ou rédiger un message à partir d'un contexte donné est un appel unique, pas une tâche agentique ouverte ; le Claude Agent SDK n'a pas d'utilité ici. Implémenté dans `agents/prospection/content.py`. |
 | **Scoring par règles métier (Python)** | Filtrer/prioriser les prospects (favorable / à qualifier / non favorable / non joignable) selon des critères définis avec l'équipe commerciale. | Un système de règles explicites est plus auditable qu'un modèle ML pour ce stade du projet — important vu l'impact direct sur qui peut être contacté (CLAUDE.md §5). Un modèle de scoring plus avancé pourra être introduit plus tard si le volume le justifie. |
 | **ReportLab / python-pptx** | Génération de supports visuels d'offre (PDF ou présentation) à partir d'un gabarit par pack (Starter/Business/Premium). | Librairies Python matures pour générer des documents commerciaux sans dépendance à un outil de design externe. |
 
@@ -78,6 +78,64 @@ marché cible. Le premier message suit le même principe de validation que l'age
 sociaux : un brief/modèle de message doit être validé par un humain avant tout envoi (pas
 de prise de contact automatique non supervisée), et jamais vers un prospect "non favorable"
 ou "non joignable" (CLAUDE.md §5).
+
+## Implémentation actuelle
+
+- `compliance.py` : `assert_source_allowed(url)` — applique **en code** la règle "LinkedIn
+  interdit, sans exception", pas seulement documentée. Toute fonction de collecte HTTP du
+  package l'appelle avant la moindre requête (voir `directory_scraper.py`).
+- `sources/google_places.py` : `search_places(query)` — recherche via Google Places API
+  (New), client HTTP injectable. Note d'honnêteté dans le fichier : schéma de réponse suivi
+  au mieux, pas vérifié contre un appel réel faute de clé API disponible dans cette session.
+- `directory_scraper.py` : `fetch_directory_page(url)` — collecte HTML basique
+  (BeautifulSoup) pour les annuaires publics, garde-fou de conformité systématique.
+- `scoring.py` : `score_prospect(signals, weights)` — implémentation réelle du tableau de
+  critères ci-dessus. Fonction pure ; poids et seuils sont des paramètres (`ScoringWeights`),
+  pas codés en dur, conformément à l'exigence d'ajustabilité déjà actée. Coordonnées
+  invalides → `non_joignable` immédiat, sans calcul de score.
+- `content.py` : `structure_prospect` (extraction/structuration) et
+  `generate_contact_message` (rédaction du premier message WhatsApp) — API Claude directe,
+  validation stricte du JSON retourné, erreur explicite si non conforme.
+- `whatsapp.py` : `send_whatsapp_message` — envoi réel via WhatsApp Business Cloud API.
+  Nécessite `Client.whatsapp_phone_number_id`/`whatsapp_access_token` (renseignés
+  manuellement, pas de flux de connexion automatisé — même limite que
+  `agents/reseaux_sociaux/meta.py`).
+- `offer.py` : `generate_offer_pdf` — génère un PDF d'offre par pack (ReportLab). Choix de
+  scope : PDF uniquement pour l'instant, pas de génération PowerPoint (`python-pptx`) tant
+  que le besoin n'est pas confirmé.
+- `agent.py` : `search_and_score` — enchaîne recherche Google Places → dérivation des
+  signaux → scoring → création des fiches en base. **Simplification assumée** : la présence
+  d'un site web est traitée comme "moderne" sans le visiter réellement (impossible de
+  distinguer "obsolète" sans ça) ; le secteur est considéré comme correspondant au
+  catalogue par construction (la recherche cible déjà un secteur donné).
+- Endpoints (`app/routers/prospection.py`), authentifiés par clé API client (comme
+  `sites.py`/`posts.py`) : `POST /api/prospects/search`, `GET /api/prospects`, `POST
+  /api/prospects/{id}/propose-contact` (**bloqué en code**, 403, si la catégorie est
+  `non_favorable`/`non_joignable`, pas seulement documenté), `POST .../validate-contact`,
+  `POST .../send-contact` (re-vérifie la catégorie en défense en profondeur + exige la
+  connexion WhatsApp, 412 sinon), `GET /api/prospects/{id}/offer` (PDF).
+- Testé : conformité (LinkedIn bloqué, y compris en sous-domaine), scoring (les 4
+  catégories, seuils configurables), recherche Google Places, structuration/génération de
+  contenu (client Claude simulé), envoi WhatsApp (client HTTP simulé), génération de PDF, et
+  le flux complet de contact via l'API (y compris le blocage 403 sur les catégories
+  interdites) — aucun appel réseau réel dans la suite de tests.
+
+## Points ouverts (pas encore fait, explicitement)
+
+- **Playwright non implémenté** : seules les sources HTML statiques (BeautifulSoup) et
+  Google Places sont couvertes ; les sources nécessitant du JavaScript restent à faire si
+  le besoin se confirme (skills retenue mais pas codée).
+- **Meta Graph API pour la recherche de prospects** (Pages professionnelles) — seul Google
+  Places est implémenté pour l'instant ; la clé `META_ADS_TOKEN` existe déjà côté Réseaux
+  sociaux mais son usage côté Prospection reste à construire.
+- **python-pptx** non implémenté — seul le PDF (ReportLab) existe.
+- **Flux de connexion WhatsApp Business** (comme pour Meta) — credentials renseignés
+  manuellement en attendant.
+- Détection réelle d'un site "obsolète" (nécessiterait de visiter et analyser le site, pas
+  seulement constater sa présence/absence).
+- Vérification de connectivité réelle : Google Places et WhatsApp Cloud API n'ont jamais été
+  appelés contre de vrais services dans cette session (pas de clés disponibles) — seule la
+  logique est testée avec des doublures.
 
 ## Rappel des permissions (voir CLAUDE.md §5)
 

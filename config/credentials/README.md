@@ -37,6 +37,7 @@ pays, pas figé pour toute la plateforme.
 | `WHATSAPP_BUSINESS_TOKEN` | WhatsApp Business API | Agent Réseaux sociaux, Agent Prospection (notifications) | Envoi de messages/notifications côté client, jamais de démarchage de prospects filtrés "non favorable"/"non joignable". |
 | `GOOGLE_ADS_TOKEN` | Google Ads | Agent Réseaux sociaux | Campagnes publicitaires, sur validation préalable uniquement. |
 | `GOOGLE_BUSINESS_PROFILE_TOKEN` | Google Business Profile | Agent Réseaux sociaux, Agent Création de site | Fiche établissement du client, référencement local. |
+| `GOOGLE_PLACES_API_KEY` | Google Places API | Agent Prospection | Recherche d'établissements publics pour la prospection — distincte de `GOOGLE_BUSINESS_PROFILE_TOKEN` (fiche du client lui-même). |
 | `DATABASE_URL` | PostgreSQL managé (Fly Postgres) | Plateforme (tous les agents, via la couche d'accès aux données) | Connexion à la base de données. |
 | `SENTRY_DSN` | Sentry (ou équivalent) | Agent Maintenance | Détection et remontée d'anomalies/bugs. |
 | `UPTIME_MONITOR_TOKEN` | Service de monitoring (ex. UptimeRobot) | Agent Maintenance | Surveillance de disponibilité des sites clients. |

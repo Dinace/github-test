@@ -9,6 +9,7 @@ from app.routers.clients import router as clients_router
 from app.routers.maintenance import router as maintenance_router
 from app.routers.maintenance import sentry_webhook_router
 from app.routers.posts import router as posts_router
+from app.routers.prospection import router as prospection_router
 from app.routers.sites import router as sites_router
 from platform_core.config import settings
 
@@ -25,6 +26,7 @@ app.include_router(sites_router)
 app.include_router(posts_router)
 app.include_router(maintenance_router)
 app.include_router(sentry_webhook_router)
+app.include_router(prospection_router)
 
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")

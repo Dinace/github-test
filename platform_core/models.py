@@ -51,6 +51,11 @@ class Client(Base):
     # plateforme, mais un durcissement reste souhaitable avant une vraie mise en prod).
     meta_page_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     meta_page_access_token: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # Connexion WhatsApp Business Cloud API du client (agent Prospection, premier contact).
+    # Même limite que meta_page_access_token : renseignés manuellement, pas de flux de
+    # connexion automatisé, stockage en clair à durcir avant une vraie mise en production.
+    whatsapp_phone_number_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    whatsapp_access_token: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
     subscription: Mapped["Subscription | None"] = relationship(back_populates="client", uselist=False)
@@ -217,5 +222,54 @@ class Post(Base):
     scheduled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
     published_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    client: Mapped["Client"] = relationship()
+
+
+class ProspectCategory(str, Enum):
+    """4 catégories actées (CLAUDE.md §5, agents/prospection/skills/README.md)."""
+
+    favorable = "favorable"
+    a_qualifier = "a_qualifier"
+    non_favorable = "non_favorable"
+    non_joignable = "non_joignable"
+
+
+class ContactStatus(str, Enum):
+    none = "none"
+    draft = "draft"
+    pending_validation = "pending_validation"
+    validated = "validated"
+    sent = "sent"
+
+
+class Prospect(Base):
+    """Fiche prospect trouvée pour le compte d'un client (agent Prospection commerciale).
+
+    Le scoring (category/score) est calculé par agents/prospection/scoring.py au moment de
+    la création — jamais recalculé "à la volée" pour éviter qu'un prospect déjà classé
+    "non favorable"/"non joignable" ne redevienne contactable sans repasser par une nouvelle
+    collecte explicite.
+    """
+
+    __tablename__ = "prospects"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    client_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("clients.id"))
+    business_name: Mapped[str] = mapped_column(String(255))
+    sector: Mapped[str] = mapped_column(String(50))
+    phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    # "google_places" | "meta_page" | "directory" — jamais "linkedin" (voir agents/
+    # prospection/compliance.py, vérifié en code, pas seulement documenté).
+    source: Mapped[str] = mapped_column(String(50))
+    raw_data: Mapped[dict] = mapped_column(_JSONB)
+    category: Mapped[ProspectCategory] = mapped_column(SAEnum(ProspectCategory, name="prospect_category_enum"))
+    score: Mapped[int] = mapped_column()
+    contact_message: Mapped[dict | None] = mapped_column(_JSONB, nullable=True)
+    contact_status: Mapped[ContactStatus] = mapped_column(
+        SAEnum(ContactStatus, name="contact_status_enum"), default=ContactStatus.none
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    contacted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     client: Mapped["Client"] = relationship()

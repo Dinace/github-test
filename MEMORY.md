@@ -725,3 +725,66 @@ Format d'entrée suggéré :
   l'environnement le permet.
 - Implémenter Prospection — dernier agent de la plateforme.
 - Devis direct BSP (WhatsApp), contact Moov Money Gabon, prix d'abonnement final — inchangé.
+
+---
+
+## 2026-09-20 — Agent Prospection implémenté : les 4 agents de la plateforme ont du code
+
+**Décisions techniques**
+- **Garde-fou de conformité codé en dur** (`agents/prospection/compliance.py`,
+  `assert_source_allowed`) : la règle "LinkedIn interdit, sans exception" est désormais
+  vérifiée EN CODE avant toute requête de collecte, pas seulement documentée — décision
+  volontairement plus stricte que pour les autres agents, vu l'impact en cas d'erreur
+  (risque juridique/ToS réel, pas seulement une mauvaise fiche prospect).
+- **Scoring pondéré réellement implémenté** (`agents/prospection/scoring.py`,
+  `score_prospect`) : fonction pure, poids et seuils en paramètres (`ScoringWeights`), pas
+  codés en dur — fidèle à l'exigence d'auditabilité déjà actée. Coordonnées invalides →
+  `non_joignable` immédiat sans calcul de score, comme documenté.
+- **Google Places API (New)** comme source principale (`sources/google_places.py`) — clé
+  dédiée `GOOGLE_PLACES_API_KEY` ajoutée, distincte de `GOOGLE_BUSINESS_PROFILE_TOKEN` (qui
+  gère la fiche du client lui-même, pas la recherche d'autres établissements). Note
+  d'honnêteté : schéma de réponse non vérifié contre un appel réel (pas de clé disponible).
+- **Nouveau modèle `Prospect`** avec un double workflow : `category` (calculé une fois à la
+  création, jamais recalculé — empêche qu'un prospect "non favorable" ne redevienne
+  contactable sans nouvelle collecte explicite) et `contact_status` (none → pending_
+  validation → validated → sent, même logique de validation humaine que Réseaux sociaux).
+  Ajout de `Client.whatsapp_phone_number_id`/`whatsapp_access_token` (même pattern que
+  `meta_page_id`/`meta_page_access_token`).
+- **Blocage 403 codé en dur, pas seulement documenté** : `POST /api/prospects/{id}/
+  propose-contact` refuse toute génération de message si `category` est `non_favorable` ou
+  `non_joignable` ; `send-contact` re-vérifie la même règle en défense en profondeur avant
+  l'envoi réel — cohérent avec l'interdiction stricte de CLAUDE.md §5, appliquée à deux
+  endroits du code, pas comptée sur une seule vérification.
+- Portée volontairement limitée par rapport au skills/README.md d'origine : Playwright,
+  Meta Graph API pour la recherche (par opposition à la publication, déjà faite côté Réseaux
+  sociaux), et python-pptx ne sont **pas implémentés** — seuls Google Places, BeautifulSoup
+  (annuaires) et ReportLab (PDF) le sont. Choix assumé : livrer un chemin complet et
+  fonctionnel plutôt que plusieurs chemins à moitié faits.
+- 85 tests au total (contre 57 avant cette session), tous passent. Packaging non-éditable
+  revérifié une dernière fois : toujours correct.
+
+**État d'avancement par agent**
+- Prospection : logique métier complète et testée pour le chemin Google Places (scoring,
+  structuration, message de contact, envoi WhatsApp, offre PDF). Restent : Playwright, Meta
+  Graph API pour la recherche, python-pptx, flux de connexion WhatsApp, détection réelle de
+  site "obsolète", connectivité réelle jamais vérifiée.
+- **Les 4 agents de la plateforme ont désormais du code** (Création de site, Réseaux
+  sociaux, Maintenance, Prospection) — la conception initiale posée en tout début de projet
+  est maintenant entièrement implémentée en MVP, avec pour chaque agent les limites
+  restantes explicitement documentées plutôt que cachées.
+
+**Problèmes rencontrés / solutions**
+- Un test de scoring avait une hypothèse incorrecte sur les poids par défaut (un score de 3
+  atteignait déjà le seuil "favorable", pas "à qualifier" comme supposé) → test corrigé pour
+  isoler proprement la propriété visée (seuil relevé explicitement) plutôt que de changer le
+  code de scoring, qui était correct.
+
+**Questions ouvertes**
+- Playwright, Meta Graph API pour la recherche de prospects, python-pptx — non implémentés.
+- Flux de connexion WhatsApp Business (comme Meta) — credentials manuels en attendant.
+- Détection réelle de site "obsolète" (nécessiterait de visiter le site).
+- Vérifier la connectivité réelle (Google Places, WhatsApp Cloud API) dès que possible.
+- Toutes les questions ouvertes des agents précédents restent valables (tâches planifiées
+  réelles, vraie auth staff, vérification de signature Sentry, flux OAuth Meta, génération
+  de visuels Pillow, login humain du dashboard, etc.) — voir les entrées précédentes.
+- Devis direct BSP (WhatsApp), contact Moov Money Gabon, prix d'abonnement final — inchangé.

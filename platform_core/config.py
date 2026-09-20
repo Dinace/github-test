@@ -29,5 +29,10 @@ class Settings(BaseSettings):
     # s'ouvrir en clair si la variable n'est pas configurée.
     ops_api_token: str = ""
 
+    # Prospection — clé simple pour Google Places API (distincte de
+    # GOOGLE_BUSINESS_PROFILE_TOKEN, qui gère la fiche établissement du client lui-même, pas
+    # la recherche d'AUTRES établissements pour la prospection).
+    google_places_api_key: str = ""
+
 
 settings = Settings()
