@@ -7,19 +7,23 @@ from sqlalchemy.orm import Session
 
 from agents.prospection.scoring import ProspectSignals, WebsiteStatus, score_prospect
 from agents.prospection.sources.google_places import RawPlaceResult, search_places
+from agents.prospection.website_audit import assess_website
 from platform_core.activity import log_event
 from platform_core.models import Prospect
 
 
-def _signals_from_place(place: RawPlaceResult) -> ProspectSignals:
+def _signals_from_place(place: RawPlaceResult, *, website_http_client: httpx.Client | None = None) -> ProspectSignals:
     """Dérive des signaux de scoring à partir d'un résultat Google Places.
 
-    Simplification assumée (voir agents/prospection/skills/README.md, points ouverts) : la
-    présence d'un `website_uri` est traitée comme un site "moderne" (Google Places ne dit
-    pas si un site est à jour) ; son absence comme "none". Distinguer "outdated"
-    nécessiterait de visiter le site, pas fait ici.
+    `website_status` visite réellement le site (agents/prospection/website_audit.py) quand
+    un `website_uri` existe — comble l'ancienne simplification "présence = moderne" (Google
+    Places ne dit pas si un site est à jour). Absence de `website_uri` : `none` directement,
+    pas de visite à faire.
     """
-    website_status = WebsiteStatus.modern if place.website_uri else WebsiteStatus.none
+    if place.website_uri:
+        website_status = assess_website(place.website_uri, http_client=website_http_client)
+    else:
+        website_status = WebsiteStatus.none
     has_recent_activity = bool(place.rating and place.user_rating_count)
 
     return ProspectSignals(
@@ -33,14 +37,26 @@ def _signals_from_place(place: RawPlaceResult) -> ProspectSignals:
 
 
 def search_and_score(
-    client_id: uuid.UUID, query: str, sector: str, *, db: Session, http_client: httpx.Client | None = None
+    client_id: uuid.UUID,
+    query: str,
+    sector: str,
+    *,
+    db: Session,
+    http_client: httpx.Client | None = None,
+    website_http_client: httpx.Client | None = None,
 ) -> list[Prospect]:
-    """Recherche des prospects via Google Places, les score, et crée les fiches en base."""
+    """Recherche des prospects via Google Places, les score, et crée les fiches en base.
+
+    `http_client` (recherche Google Places) et `website_http_client` (visite des sites des
+    prospects trouvés) sont injectables séparément : deux intégrations techniques
+    distinctes, avec des besoins de test différents (l'une simule des réponses JSON Places,
+    l'autre du HTML) — les confondre rendrait les deux plus difficiles à tester isolément.
+    """
     places = search_places(query, http_client=http_client)
 
     prospects = []
     for place in places:
-        signals = _signals_from_place(place)
+        signals = _signals_from_place(place, website_http_client=website_http_client)
         category, score = score_prospect(signals)
 
         prospect = Prospect(

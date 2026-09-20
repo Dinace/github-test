@@ -1069,3 +1069,47 @@ renseigné manuellement comme les autres champs de contact du client (`meta_page
 - `Client.contact_phone` toujours sans flux de saisie dédié (manuel, comme les autres
   champs de contact).
 - Toutes les autres questions ouvertes des entrées précédentes restent valables.
+
+## 2026-09-20 — Prospection : détection réelle du statut d'un site (moderne/obsolète/absent)
+
+**Contexte** : suite de "réalise le non fait", point ouvert suivant (demande explicite de
+continuer sur Prospection ou Maintenance). Deux candidats Maintenance écartés d'abord :
+création automatique d'un monitor UptimeRobot à la publication d'un site, et scan des
+en-têtes HTTP des sites clients générés — les deux bloqués par un manque plus fondamental
+découvert en creusant : **aucune URL publique n'existe encore pour un site généré**
+(`Site` n'a pas de champ URL, et `agents/creation_site/storage.py` n'a jamais résolu de
+domaine/CDN, juste des clés R2 internes). Inventer ce schéma d'URL aurait été une décision
+de modélisation plus large que les deux points ouverts eux-mêmes — laissé de côté plutôt
+que bâclé, à traiter comme son propre lot le jour où le schéma de domaine est tranché.
+
+Pivot vers Prospection, où l'équivalent existe déjà : chaque prospect Google Places a un
+`website_uri` **réel** (site d'UN AUTRE établissement, pas un site généré par la
+plateforme) — jusqu'ici traité naïvement ("présent = moderne", faute de mieux) faute de le
+visiter.
+
+**Implémentation**
+- `agents/prospection/website_audit.py::assess_website(url)` — visite réellement le site
+  (client HTTP injectable). Heuristique à 3 niveaux : injoignable/HTTP>=400 → `none` (un
+  site cassé a le même besoin qu'un prospect sans site) ; corps HTML < 500 caractères
+  (page parquée/en construction) ou absence de balise `<meta name="viewport">` (signal
+  robuste de site non pensé mobile, standard depuis longtemps) → `outdated` ; sinon
+  `modern`. Note d'honnêteté explicite dans le fichier (même esprit que
+  `security_scan.py`) : c'est une heuristique technique, pas un audit de conception/SEO.
+- `agents/prospection/agent.py::_signals_from_place`/`search_and_score` : branché ;
+  `website_http_client` ajouté comme paramètre séparé de `http_client` (Google Places),
+  deux intégrations distinctes avec des besoins de test différents.
+- Testé : les 5 cas de `assess_website` (moderne, sans viewport, page minimale, HTTP
+  d'erreur, erreur réseau), et un test d'intégration dans `search_and_score` avec deux
+  prospects (site moderne vs ancien) vérifiant que le score reflète bien la visite réelle
+  (`ScoringWeights.website_modern` pénalise un site moderne — preuve que ce n'est plus la
+  simple présence de `website_uri` qui décide).
+- 133 tests au total (contre 127 avant ce lot), tous passent. Packaging non-éditable
+  revérifié.
+
+**Questions ouvertes restantes**
+- Les deux points Maintenance écartés (monitor UptimeRobot auto-créé, scan d'en-têtes HTTP
+  des sites clients) restent à faire, bloqués sur la modélisation d'une URL publique de
+  site — à traiter ensemble le jour où ce schéma est tranché.
+- Toutes les autres questions ouvertes des entrées précédentes restent valables (Playwright,
+  Meta Graph API pour la recherche de prospects, python-pptx, flux OAuth WhatsApp/Meta,
+  vraie authentification staff, etc.).

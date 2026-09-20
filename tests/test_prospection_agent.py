@@ -30,6 +30,23 @@ class _FakeHttpClient:
         return _FakeResponse(self._payload)
 
 
+class _FakeWebsiteResponse:
+    def __init__(self, status_code: int, text: str) -> None:
+        self.status_code = status_code
+        self.text = text
+
+
+class _FakeWebsiteHttpClient:
+    """Simule la visite du site d'un prospect (agents/prospection/website_audit.py) —
+    distinct de `_FakeHttpClient` ci-dessus, qui simule l'API Google Places (POST/JSON)."""
+
+    def __init__(self, html_by_url: dict[str, str]) -> None:
+        self._html_by_url = html_by_url
+
+    def get(self, url: str, **kwargs) -> _FakeWebsiteResponse:
+        return _FakeWebsiteResponse(200, self._html_by_url.get(url, ""))
+
+
 @pytest.fixture()
 def db_session(tmp_path) -> Iterator[Session]:
     engine = create_engine(f"sqlite:///{tmp_path}/test.db")
@@ -70,3 +87,53 @@ def test_search_and_score_creates_prospects_with_categories(db_session: Session,
     assert unreachable.category == ProspectCategory.non_joignable
     assert all(p.client_id == client_id for p in prospects)
     assert all(p.source == "google_places" for p in prospects)
+
+
+def test_search_and_score_visits_prospect_website_to_assess_status(
+    db_session: Session, client_id: uuid.UUID
+) -> None:
+    """Le statut du site n'est plus déduit de la simple présence de `websiteUri` : le site
+    est réellement visité (agents/prospection/website_audit.py) pour distinguer un site
+    moderne d'un site obsolète."""
+    payload = {
+        "places": [
+            {
+                "displayName": {"text": "Boutique Site Moderne"},
+                "nationalPhoneNumber": "+24101020304",
+                "websiteUri": "https://boutique-moderne.ga",
+            },
+            {
+                "displayName": {"text": "Boutique Vieux Site"},
+                "nationalPhoneNumber": "+24101020305",
+                "websiteUri": "https://vieux-site.ga",
+            },
+        ]
+    }
+    fake_http = _FakeHttpClient(payload)
+    fake_website_http = _FakeWebsiteHttpClient(
+        {
+            "https://boutique-moderne.ga": (
+                '<html><head><meta name="viewport" content="width=device-width"></head>'
+                "<body>" + "<p>Contenu riche.</p>" * 50 + "</body></html>"
+            ),
+            "https://vieux-site.ga": "<html><body>Site minimal sans balise viewport.</body></html>",
+        }
+    )
+
+    prospects = search_and_score(
+        client_id,
+        "boutique Libreville",
+        "boutique",
+        db=db_session,
+        http_client=fake_http,
+        website_http_client=fake_website_http,
+    )
+
+    modern = next(p for p in prospects if p.business_name == "Boutique Site Moderne")
+    outdated = next(p for p in prospects if p.business_name == "Boutique Vieux Site")
+
+    assert modern.raw_data["website_uri"] == "https://boutique-moderne.ga"
+    # Un site moderne pèse négativement dans le score (voir ScoringWeights.website_modern) :
+    # le prospect avec le site à jour doit scorer strictement moins bien que celui à l'ancien
+    # site, preuve que la visite réelle du site a bien influencé le résultat.
+    assert modern.score < outdated.score

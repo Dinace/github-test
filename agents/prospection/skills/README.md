@@ -103,10 +103,20 @@ ou "non joignable" (CLAUDE.md §5).
 - `offer.py` : `generate_offer_pdf` — génère un PDF d'offre par pack (ReportLab). Choix de
   scope : PDF uniquement pour l'instant, pas de génération PowerPoint (`python-pptx`) tant
   que le besoin n'est pas confirmé.
+- `website_audit.py` : `assess_website(url)` — visite réellement le site d'un prospect
+  (client HTTP injectable) et retourne un statut heuristique (`none`/`outdated`/`modern`) :
+  page injoignable ou HTTP >= 400 → `none` (même besoin qu'un prospect sans site) ; corps
+  HTML minimal (< 500 caractères, signature typique d'un domaine parké ou d'une page "en
+  construction") ou absence de balise `<meta name="viewport">` (site non pensé mobile,
+  signal robuste vu son ancienneté comme standard) → `outdated` ; sinon `modern`. **Note
+  d'honnêteté** (même esprit que `security_scan.py`) : c'est une heuristique technique, pas
+  un audit de conception/SEO — peut mal classer un cas inhabituel dans les deux sens.
 - `agent.py` : `search_and_score` — enchaîne recherche Google Places → dérivation des
-  signaux → scoring → création des fiches en base. **Simplification assumée** : la présence
-  d'un site web est traitée comme "moderne" sans le visiter réellement (impossible de
-  distinguer "obsolète" sans ça) ; le secteur est considéré comme correspondant au
+  signaux (dont la visite réelle du site via `website_audit.py` quand un `website_uri`
+  existe, comble l'ancienne simplification "présence = moderne") → scoring → création des
+  fiches en base. `http_client` (recherche Places) et `website_http_client` (visite des
+  sites) sont injectables séparément, deux intégrations distinctes avec des besoins de test
+  différents. Simplification restante : le secteur est considéré comme correspondant au
   catalogue par construction (la recherche cible déjà un secteur donné).
 - Endpoints (`app/routers/prospection.py`), authentifiés par clé API client (comme
   `sites.py`/`posts.py`) : `POST /api/prospects/search`, `GET /api/prospects`, `POST
@@ -115,10 +125,11 @@ ou "non joignable" (CLAUDE.md §5).
   `POST .../send-contact` (re-vérifie la catégorie en défense en profondeur + exige la
   connexion WhatsApp, 412 sinon), `GET /api/prospects/{id}/offer` (PDF).
 - Testé : conformité (LinkedIn bloqué, y compris en sous-domaine), scoring (les 4
-  catégories, seuils configurables), recherche Google Places, structuration/génération de
-  contenu (client Claude simulé), envoi WhatsApp (client HTTP simulé), génération de PDF, et
-  le flux complet de contact via l'API (y compris le blocage 403 sur les catégories
-  interdites) — aucun appel réseau réel dans la suite de tests.
+  catégories, seuils configurables), recherche Google Places, détection heuristique du
+  statut d'un site (moderne/obsolète/absent, y compris échec réseau et HTTP >= 400),
+  structuration/génération de contenu (client Claude simulé), envoi WhatsApp (client HTTP
+  simulé), génération de PDF, et le flux complet de contact via l'API (y compris le blocage
+  403 sur les catégories interdites) — aucun appel réseau réel dans la suite de tests.
 
 ## Points ouverts (pas encore fait, explicitement)
 
@@ -131,11 +142,10 @@ ou "non joignable" (CLAUDE.md §5).
 - **python-pptx** non implémenté — seul le PDF (ReportLab) existe.
 - **Flux de connexion WhatsApp Business** (comme pour Meta) — credentials renseignés
   manuellement en attendant.
-- Détection réelle d'un site "obsolète" (nécessiterait de visiter et analyser le site, pas
-  seulement constater sa présence/absence).
 - Vérification de connectivité réelle : Google Places et WhatsApp Cloud API n'ont jamais été
   appelés contre de vrais services dans cette session (pas de clés disponibles) — seule la
-  logique est testée avec des doublures.
+  logique est testée avec des doublures. Idem pour `website_audit.py` : l'heuristique n'a
+  jamais visité de vrai site dans cette session.
 
 ## Rappel des permissions (voir CLAUDE.md §5)
 
