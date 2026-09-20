@@ -16,7 +16,11 @@ def _utcnow() -> datetime:
 
 # JSONB sur PostgreSQL (choix acté, CLAUDE.md §3), JSON générique en repli sur les autres
 # dialectes (ex. SQLite en test) où JSONB n'est pas compilable.
-_JSONB = JSON().with_variant(JSONB(), "postgresql")
+# none_as_null=True : par défaut, SQLAlchemy stocke un None Python comme un littéral JSON
+# "null" (pas un vrai NULL SQL) — une colonne "vide" ne serait alors jamais NULL au sens
+# SQL, cassant tout filtre `.is_(None)`/`.isnot(None)` (découvert via agents/planning/
+# dashboard.py, qui filtre justement sur Site.content IS NOT NULL).
+_JSONB = JSON(none_as_null=True).with_variant(JSONB(none_as_null=True), "postgresql")
 
 
 class Pack(str, Enum):
@@ -271,5 +275,65 @@ class Prospect(Base):
     )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
     contacted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    client: Mapped["Client"] = relationship()
+
+
+class ActivityEvent(Base):
+    """Journal d'événements partagé entre agents (agents/planning/skills/README.md).
+
+    Contrairement aux autres tables (chacune "possédée" par un agent), celle-ci vit dans
+    `platform_core` — le package partagé — précisément parce qu'elle est écrite par
+    plusieurs agents (ex. Prospection) et lue par l'agent Planning pour reconstituer un
+    historique. Ce n'est pas une exception au cloisonnement (CLAUDE.md §5, "ne jamais
+    modifier les données d'un autre agent") : chaque agent n'écrit que SES PROPRES
+    événements ici, jamais les données propres d'un autre agent (Site, Post, Prospect...).
+    """
+
+    __tablename__ = "activity_events"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    client_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("clients.id"))
+    # "creation_site" | "reseaux_sociaux" | "maintenance" | "prospection" — l'agent qui a
+    # émis l'événement, jamais un autre.
+    agent: Mapped[str] = mapped_column(String(50))
+    entity_type: Mapped[str] = mapped_column(String(50))
+    entity_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    event_type: Mapped[str] = mapped_column(String(100))
+    details: Mapped[dict] = mapped_column(_JSONB, default=dict)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+
+class AppointmentStatus(str, Enum):
+    proposed = "proposed"
+    confirmed = "confirmed"
+    cancelled = "cancelled"
+    completed = "completed"
+
+
+class Appointment(Base):
+    """Rendez-vous entre l'équipe de la plateforme (staff) et un client PME.
+
+    Décision actée avec l'utilisateur : ces RDV sont staff <-> client (onboarding, suivi
+    commercial, support), pas des RDV grand public pour les clients FINAUX du PME — ce
+    dernier usage (ex. réservation restaurant) resterait un besoin distinct, non couvert ici.
+    """
+
+    __tablename__ = "appointments"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    client_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("clients.id"))
+    # Nom/email de la personne côté staff — pas de compte staff individuel pour l'instant
+    # (même limite que OPS_API_TOKEN pour l'agent Maintenance).
+    staff_contact: Mapped[str] = mapped_column(String(255))
+    purpose: Mapped[str] = mapped_column(String(255))
+    scheduled_at: Mapped[datetime] = mapped_column(DateTime)
+    duration_minutes: Mapped[int] = mapped_column(default=30)
+    status: Mapped[AppointmentStatus] = mapped_column(
+        SAEnum(AppointmentStatus, name="appointment_status_enum"), default=AppointmentStatus.proposed
+    )
+    notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     client: Mapped["Client"] = relationship()

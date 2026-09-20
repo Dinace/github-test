@@ -11,6 +11,7 @@ from agents.prospection import whatsapp
 from agents.prospection.content import ContentGenerationError, generate_contact_message
 from agents.prospection.offer import default_highlights_for_pack, generate_offer_pdf
 from app.auth import get_current_client
+from platform_core.activity import log_event
 from platform_core.db import get_db
 from platform_core.models import Client, ContactStatus, Pack, Prospect, ProspectCategory
 
@@ -91,6 +92,14 @@ def propose_contact(
     prospect.contact_message = message.model_dump(mode="json")
     prospect.contact_status = ContactStatus.pending_validation
     db.commit()
+    log_event(
+        db,
+        client_id=current_client.id,
+        agent="prospection",
+        entity_type="prospect",
+        entity_id=prospect.id,
+        event_type="contact_proposed",
+    )
     return {"id": str(prospect.id), "contact_status": prospect.contact_status.value, "message": message.message}
 
 
@@ -107,6 +116,14 @@ def validate_contact(
 
     prospect.contact_status = ContactStatus.validated
     db.commit()
+    log_event(
+        db,
+        client_id=current_client.id,
+        agent="prospection",
+        entity_type="prospect",
+        entity_id=prospect.id,
+        event_type="contact_validated",
+    )
     return {"id": str(prospect.id), "contact_status": prospect.contact_status.value}
 
 
@@ -148,6 +165,14 @@ def send_contact(
     prospect.contact_status = ContactStatus.sent
     prospect.contacted_at = datetime.now(UTC)
     db.commit()
+    log_event(
+        db,
+        client_id=current_client.id,
+        agent="prospection",
+        entity_type="prospect",
+        entity_id=prospect.id,
+        event_type="contact_sent",
+    )
     return {"id": str(prospect.id), "contact_status": prospect.contact_status.value}
 
 

@@ -78,6 +78,7 @@ agents/
   reseaux_sociaux/skills/README.md
   maintenance/skills/README.md
   prospection/skills/README.md
+  planning/skills/README.md   # outil interne, hors packs — voir ci-dessous
 ```
 
 Noms de dossiers en snake_case (et non kebab-case comme dans les premières versions de ce
@@ -86,6 +87,23 @@ document) : ce sont aussi des packages Python valides, importables directement (
 
 Les 4 agents contiennent désormais du code (voir chaque `skills/README.md`, section
 "Implémentation actuelle") — Prospection (dernier arrivé) complète la série.
+
+### Agent Planning (interne, hors packs)
+
+En plus des 4 agents ci-dessus, `agents/planning/` est un **outil interne** à l'équipe qui
+opère la plateforme — pas un agent vendu dans les packs (§1) : il n'apparaît pas dans la
+table des packs et n'est pas un critère de montée en gamme.
+
+- **Suivi transverse** : vue d'ensemble de l'activité de chaque client à travers les 4
+  agents (sites/posts/prospects en attente d'action), et historique du pipeline de chaque
+  prospect dans le temps (`platform_core.models.ActivityEvent`, journal partagé auquel
+  chaque agent peut émettre — pour l'instant seul Prospection le fait).
+- **Rendez-vous** : entre l'équipe de la plateforme et les clients PME (onboarding, suivi
+  commercial, support) — pas un module de prise de RDV grand public pour les clients finaux
+  du PME, qui resterait un besoin distinct non couvert.
+- Deux niveaux d'accès : staff (`OPS_API_TOKEN`, même stopgap que Maintenance) pour voir
+  n'importe quel client et gérer les RDV ; client (sa propre clé API) pour son propre résumé
+  et ses propres RDV. Voir `agents/planning/skills/README.md` pour le détail.
 
 Chaque `skills/README.md` documente les skills/frameworks/librairies retenus pour l'agent
 concerné, avec justification, points encore à trancher, et rappel des permissions qui lui
@@ -204,7 +222,9 @@ intervient sur le code du projet lui-même.
 Scaffolding applicatif créé : package partagé `platform_core/` (config, accès DB, modèles),
 app FastAPI + dashboard dans `app/`, migrations Alembic dans `migrations/`. Les 4 agents
 sont implémentés (`agents/creation_site/`, `agents/reseaux_sociaux/`, `agents/maintenance/`,
-`agents/prospection/`, voir leurs `skills/README.md` section "Implémentation actuelle").
+`agents/prospection/`, voir leurs `skills/README.md` section "Implémentation actuelle"),
+ainsi que l'outil interne `agents/planning/` (suivi transverse + rendez-vous staff/client,
+hors packs — voir §2 "Agent Planning").
 
 1. Copier `config/credentials/.env.example` vers `config/credentials/.env` et renseigner au
    minimum `DATABASE_URL` (PostgreSQL local ou distant). Pour utiliser réellement l'agent
@@ -221,7 +241,10 @@ sont implémentés (`agents/creation_site/`, `agents/reseaux_sociaux/`, `agents/
    `agents/maintenance/skills/README.md`). Pour utiliser réellement l'agent Prospection,
    renseigner `GOOGLE_PLACES_API_KEY` et, pour l'envoi WhatsApp,
    `Client.whatsapp_phone_number_id`/`whatsapp_access_token` (mêmes limites que pour Meta —
-   voir `agents/prospection/skills/README.md`).
+   voir `agents/prospection/skills/README.md`). Les endpoints staff de l'agent Planning
+   (`/api/planning/clients/*`, `/api/planning/appointments`) réutilisent le même
+   `OPS_API_TOKEN` que Maintenance ; les endpoints `/api/planning/me/*` utilisent la clé API
+   du client comme les autres agents.
 2. Installer les dépendances (Python ≥ 3.12) : `pip install -e ".[dev]"`
 3. Appliquer les migrations : `alembic upgrade head`
 4. Lancer l'app : `uvicorn app.main:app --reload`, puis ouvrir `http://localhost:8000`

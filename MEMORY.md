@@ -788,3 +788,70 @@ Format d'entrée suggéré :
   réelles, vraie auth staff, vérification de signature Sentry, flux OAuth Meta, génération
   de visuels Pillow, login humain du dashboard, etc.) — voir les entrées précédentes.
 - Devis direct BSP (WhatsApp), contact Moov Money Gabon, prix d'abonnement final — inchangé.
+
+---
+
+## 2026-09-20 — Agent Planning ajouté (suivi transverse + RDV, outil interne hors packs)
+
+**Décisions techniques**
+- **Cadrage clarifié avec l'utilisateur avant tout code** (2 questions posées) : Planning
+  doit suivre (a) l'activité de chaque client à travers les 4 agents et (b) le pipeline de
+  chaque prospect dans le temps ; les RDV sont **staff <-> client PME** (onboarding, suivi
+  commercial), pas un module public de prise de RDV pour les clients finaux du PME.
+- **Décision de framing actée** : Planning n'est **pas un 5e agent vendu dans les packs**
+  (CLAUDE.md §1) — c'est un outil interne à l'équipe qui opère la plateforme, avec une vue
+  limitée exposée au client (son propre résumé, ses propres RDV). Documenté comme tel dans
+  CLAUDE.md §2 (nouvelle sous-section dédiée, séparée de la table des 4 agents) pour ne pas
+  fausser la table des packs.
+- **Nouveau concept transverse** : `platform_core.models.ActivityEvent` + `platform_core.
+  activity.log_event` — un journal d'événements **partagé entre agents**, qui vit dans le
+  package partagé (pas dans un agent précis) précisément parce que plusieurs agents y
+  écrivent. Ce n'est pas une exception au cloisonnement (CLAUDE.md §5) : chaque agent ne
+  journalise que ses propres événements, jamais les données propres d'un autre agent.
+  Seul Prospection émet des événements pour l'instant (`created`, `contact_proposed`,
+  `contact_validated`, `contact_sent`) — les 3 autres agents ne sont pas encore instrumentés.
+- **Nouveau modèle `Appointment`** (staff <-> client), cycle de vie complet (proposed →
+  confirmed/cancelled → completed), avec un `staff_contact` en texte libre faute de vrai
+  système de comptes staff (même limite que `OPS_API_TOKEN`).
+- **Deux routeurs séparés** (`app/routers/planning.py`) avec deux niveaux d'accès distincts
+  dans le même fichier : `staff_router` (OPS_API_TOKEN, réutilisé de Maintenance) pour voir
+  n'importe quel client/prospect et gérer tous les RDV ; `client_router` (clé API du client)
+  pour son propre résumé et ses propres RDV, avec vérification de propriété comme les
+  autres agents.
+- **Synthèse en langage naturel** (`digest.py`) via API Claude directe (même correction
+  que les 4 autres agents) — transforme les compteurs structurés du résumé en 2-3 phrases
+  pour l'équipe.
+- **Bug SQLAlchemy réel découvert et corrigé** : `Site.content.isnot(None)` ne filtrait
+  rien, car SQLAlchemy stocke par défaut un `None` Python dans une colonne `JSON` comme un
+  littéral JSON `"null"`, pas un vrai `NULL` SQL. Corrigé à la racine
+  (`JSON(none_as_null=True)` sur le type `_JSONB` partagé), ce qui corrige aussi ce
+  comportement pour `Post.content`/`Prospect.contact_message` qui utilisent le même type —
+  un bug qui existait silencieusement depuis la création de ces colonnes, révélé seulement
+  parce que Planning est le premier agent à filtrer en SQL sur la nullité d'une colonne JSON
+  (les autres agents ne faisaient cette vérification qu'en Python, après récupération d'un
+  objet unique, ce qui ne révèle pas le problème).
+- 100 tests au total (contre 85 avant cette session), tous passent. Packaging non-éditable
+  revérifié une dernière fois : toujours correct.
+
+**État d'avancement par agent**
+- Planning : logique métier complète et testée (résumé transverse, historique de pipeline,
+  cycle de vie des RDV, synthèse Claude). Restent : instrumenter les 3 autres agents pour
+  qu'ils émettent aussi des événements, brancher les rappels WhatsApp sur les RDV, vraie
+  synchronisation calendrier externe, vrai système de comptes staff.
+- Les 4 agents produit + l'outil interne Planning ont désormais tous du code.
+
+**Problèmes rencontrés / solutions**
+- Voir le bug SQLAlchemy `none_as_null` ci-dessus — découvert par un test qui vérifiait
+  explicitement le comportement d'agrégation (créer un site avec `content=None` et un autre
+  avec du contenu, puis vérifier que seul le second est compté), pas une inspection de code.
+
+**Questions ouvertes**
+- Instrumenter Création de site, Réseaux sociaux et Maintenance pour qu'ils émettent aussi
+  des événements vers `ActivityEvent` (seul Prospection le fait pour l'instant).
+- Brancher les rappels de RDV automatiques (réutiliser `agents.prospection.whatsapp`).
+- Synchronisation avec un vrai calendrier externe (Google Calendar) côté staff.
+- Vrai système de comptes staff (remplacer le `staff_contact` en texte libre et
+  `OPS_API_TOKEN`, cohérent avec la question déjà ouverte pour Maintenance).
+- Toutes les questions ouvertes des agents précédents restent valables — voir les entrées
+  précédentes (tâches planifiées réelles, flux OAuth Meta, login humain du dashboard, devis
+  BSP/Moov Money, prix d'abonnement final, etc.).

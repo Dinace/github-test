@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from agents.prospection.scoring import ProspectSignals, WebsiteStatus, score_prospect
 from agents.prospection.sources.google_places import RawPlaceResult, search_places
+from platform_core.activity import log_event
 from platform_core.models import Prospect
 
 
@@ -58,4 +59,15 @@ def search_and_score(
     db.commit()
     for prospect in prospects:
         db.refresh(prospect)
+        # Alimente l'historique lu par l'agent Planning (platform_core.activity) — Prospection
+        # ne journalise que ses propres événements, jamais les données d'un autre agent.
+        log_event(
+            db,
+            client_id=client_id,
+            agent="prospection",
+            entity_type="prospect",
+            entity_id=prospect.id,
+            event_type="created",
+            details={"category": prospect.category.value, "score": prospect.score},
+        )
     return prospects
