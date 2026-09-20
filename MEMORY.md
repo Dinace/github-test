@@ -1019,3 +1019,53 @@ Planning (bloqués sur des décisions de modélisation non encore prises — voi
 précédente), génération de visuels Pillow, export PowerPoint des offres, recherche Meta
 Graph API pour Prospection, scan d'en-têtes HTTP des sites clients, vrai système de comptes
 staff, flux OAuth Meta/WhatsApp, synchronisation calendrier externe.
+
+## 2026-09-20 — Décision : rappels de RDV de Planning (contact_phone + WhatsApp plateforme)
+
+**Contexte** : demande explicite de l'utilisateur de trancher ce qui avait été
+volontairement laissé en suspens dans l'entrée précédente ("nécessite un numéro de contact
+PME et des identifiants WhatsApp au niveau plateforme, pas encore modélisés... à reprendre
+comme un lot dédié plutôt que rajouté au forceps").
+
+**Décision actée** : c'est le **staff** de la plateforme qui initie le rappel vers le
+client, jamais l'inverse — à l'opposé de l'agent Prospection, où c'est le client qui
+contacte ses propres prospects via SON PROPRE compte WhatsApp Business. Ça implique deux
+identités WhatsApp Business distinctes qui ne doivent jamais être confondues :
+- le compte du **client** (`Client.whatsapp_phone_number_id`/`whatsapp_access_token`,
+  existant, utilisé par Prospection) ;
+- le compte de la **plateforme elle-même** (nouveau : `settings.platform_whatsapp_
+  phone_number_id`/`platform_whatsapp_access_token`), utilisé uniquement par Planning.
+
+Conséquence sur le modèle de données : un nouveau champ `Client.contact_phone` (juste un
+numéro, pas un compte WhatsApp Business) — le numéro de la PME que le staff contacte,
+renseigné manuellement comme les autres champs de contact du client (`meta_page_id`,
+`whatsapp_phone_number_id`...), pas encore de flux de saisie dédié.
+
+**Implémentation**
+- `platform_core/models.py` : `Client.contact_phone` (String(50), nullable) et
+  `Appointment.reminder_sent_at` (DateTime, nullable — évite les rappels en double).
+  Migration `e61cf9c077bd`.
+- `platform_core/config.py` : `platform_whatsapp_phone_number_id`/
+  `platform_whatsapp_access_token`, vides par défaut (le job ne fait rien tant qu'ils ne
+  sont pas configurés, dégradation silencieuse cohérente avec les autres tâches planifiées).
+- `agents/planning/scheduled_jobs.py::send_appointment_reminders` — 5ᵉ tâche planifiée
+  (APScheduler, tick de 30 minutes), enregistrée dans `platform_core/scheduler.py`. Envoie
+  un rappel WhatsApp pour tout RDV `proposed`/`confirmed` dont l'échéance tombe dans les 24h
+  (fenêtre fixe, pas encore configurable) et sans rappel déjà envoyé. Réutilise
+  `agents.prospection.whatsapp.send_whatsapp_message` (même précédent que Maintenance
+  réutilisant le client R2 de Création de site) avec les credentials **plateforme**, pas
+  ceux du client. Échec d'envoi → notification staff (une seule par RDV tant qu'elle n'est
+  pas acquittée), même principe que `publish_due_posts`.
+- Testé : no-op sans credentials plateforme configurés, envoi + marquage
+  `reminder_sent_at`, non-duplication au tick suivant, ignoré sans `contact_phone`, ignoré
+  hors fenêtre de 24h, notification unique en cas d'échec d'envoi répété.
+- 127 tests au total (contre 121 avant ce lot), tous passent. Packaging non-éditable
+  revérifié ; smoke-test manuel du job contre une vraie base SQLite vide (sans credentials
+  configurés, comportement no-op confirmé).
+
+**Questions ouvertes restantes**
+- Fenêtre de rappel fixe (24h) — pas de rappel à plusieurs échéances (ex. J-1 et H-1), pas
+  demandé pour l'instant.
+- `Client.contact_phone` toujours sans flux de saisie dédié (manuel, comme les autres
+  champs de contact).
+- Toutes les autres questions ouvertes des entrées précédentes restent valables.

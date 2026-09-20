@@ -9,10 +9,15 @@ from agents.maintenance import backup as backup_module
 from agents.maintenance import scheduled_jobs as maintenance_jobs
 from agents.maintenance import security_scan as security_scan_module
 from agents.maintenance import uptime as uptime_module
+from agents.planning import scheduled_jobs as planning_jobs
+from agents.prospection import whatsapp as whatsapp_module
 from agents.reseaux_sociaux import agent as post_agent
 from agents.reseaux_sociaux import scheduled_jobs as posts_jobs
+from platform_core.config import settings
 from platform_core.db import Base
 from platform_core.models import (
+    Appointment,
+    AppointmentStatus,
     Client,
     Notification,
     NotificationCategory,
@@ -331,3 +336,173 @@ def test_run_uptime_checks_resets_down_since_when_back_up(session_factory, monke
 
     with session_factory() as db:
         assert db.get(Site, site_id).down_since is None
+
+
+# --- Planning : send_appointment_reminders -------------------------------------------------
+
+
+def _platform_whatsapp_configured(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "platform_whatsapp_phone_number_id", "platform-number-id")
+    monkeypatch.setattr(settings, "platform_whatsapp_access_token", "platform-token")
+
+
+def test_send_appointment_reminders_noop_without_platform_credentials(
+    session_factory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "platform_whatsapp_phone_number_id", "")
+    monkeypatch.setattr(settings, "platform_whatsapp_access_token", "")
+    client = _make_client(session_factory, contact_phone="+24101020304")
+    with session_factory() as db:
+        db.add(
+            Appointment(
+                client_id=client,
+                staff_contact="success@plateforme.example",
+                purpose="Onboarding",
+                scheduled_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=2),
+                status=AppointmentStatus.confirmed,
+            )
+        )
+        db.commit()
+
+    calls = []
+    monkeypatch.setattr(whatsapp_module, "send_whatsapp_message", lambda *a, **kw: calls.append(a) or "msg-id")
+
+    planning_jobs.send_appointment_reminders(session_factory)
+
+    assert calls == []
+
+
+def test_send_appointment_reminders_sends_and_marks_sent(session_factory, monkeypatch: pytest.MonkeyPatch) -> None:
+    _platform_whatsapp_configured(monkeypatch)
+    client = _make_client(session_factory, contact_phone="+24101020304")
+    with session_factory() as db:
+        appointment = Appointment(
+            client_id=client,
+            staff_contact="success@plateforme.example",
+            purpose="Onboarding",
+            scheduled_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=2),
+            status=AppointmentStatus.confirmed,
+        )
+        db.add(appointment)
+        db.commit()
+        appointment_id = appointment.id
+
+    calls = []
+    monkeypatch.setattr(
+        whatsapp_module, "send_whatsapp_message", lambda *a, **kw: calls.append(a) or "msg-id"
+    )
+
+    planning_jobs.send_appointment_reminders(session_factory)
+
+    assert len(calls) == 1
+    phone_number_id, access_token, to, message = calls[0]
+    assert phone_number_id == "platform-number-id"
+    assert access_token == "platform-token"
+    assert to == "+24101020304"
+    assert "Onboarding" in message
+
+    with session_factory() as db:
+        assert db.get(Appointment, appointment_id).reminder_sent_at is not None
+
+
+def test_send_appointment_reminders_does_not_duplicate(session_factory, monkeypatch: pytest.MonkeyPatch) -> None:
+    _platform_whatsapp_configured(monkeypatch)
+    client = _make_client(session_factory, contact_phone="+24101020304")
+    with session_factory() as db:
+        db.add(
+            Appointment(
+                client_id=client,
+                staff_contact="success@plateforme.example",
+                purpose="Onboarding",
+                scheduled_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=2),
+                status=AppointmentStatus.confirmed,
+            )
+        )
+        db.commit()
+
+    calls = []
+    monkeypatch.setattr(whatsapp_module, "send_whatsapp_message", lambda *a, **kw: calls.append(a) or "msg-id")
+
+    planning_jobs.send_appointment_reminders(session_factory)
+    planning_jobs.send_appointment_reminders(session_factory)
+
+    assert len(calls) == 1
+
+
+def test_send_appointment_reminders_skips_without_contact_phone(
+    session_factory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _platform_whatsapp_configured(monkeypatch)
+    client = _make_client(session_factory)  # pas de contact_phone
+    with session_factory() as db:
+        db.add(
+            Appointment(
+                client_id=client,
+                staff_contact="success@plateforme.example",
+                purpose="Onboarding",
+                scheduled_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=2),
+                status=AppointmentStatus.confirmed,
+            )
+        )
+        db.commit()
+
+    calls = []
+    monkeypatch.setattr(whatsapp_module, "send_whatsapp_message", lambda *a, **kw: calls.append(a) or "msg-id")
+
+    planning_jobs.send_appointment_reminders(session_factory)
+
+    assert calls == []
+
+
+def test_send_appointment_reminders_skips_outside_window(session_factory, monkeypatch: pytest.MonkeyPatch) -> None:
+    _platform_whatsapp_configured(monkeypatch)
+    client = _make_client(session_factory, contact_phone="+24101020304")
+    with session_factory() as db:
+        db.add(
+            Appointment(
+                client_id=client,
+                staff_contact="success@plateforme.example",
+                purpose="Onboarding",
+                scheduled_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(days=5),
+                status=AppointmentStatus.confirmed,
+            )
+        )
+        db.commit()
+
+    calls = []
+    monkeypatch.setattr(whatsapp_module, "send_whatsapp_message", lambda *a, **kw: calls.append(a) or "msg-id")
+
+    planning_jobs.send_appointment_reminders(session_factory)
+
+    assert calls == []
+
+
+def test_send_appointment_reminders_failure_notifies_once(session_factory, monkeypatch: pytest.MonkeyPatch) -> None:
+    _platform_whatsapp_configured(monkeypatch)
+    client = _make_client(session_factory, contact_phone="+24101020304")
+    with session_factory() as db:
+        appointment = Appointment(
+            client_id=client,
+            staff_contact="success@plateforme.example",
+            purpose="Onboarding",
+            scheduled_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=2),
+            status=AppointmentStatus.confirmed,
+        )
+        db.add(appointment)
+        db.commit()
+        appointment_id = appointment.id
+
+    def _fail(*a, **kw):
+        raise whatsapp_module.WhatsAppSendError("échec API WhatsApp")
+
+    monkeypatch.setattr(whatsapp_module, "send_whatsapp_message", _fail)
+
+    planning_jobs.send_appointment_reminders(session_factory)
+    planning_jobs.send_appointment_reminders(session_factory)
+
+    with session_factory() as db:
+        assert db.get(Appointment, appointment_id).reminder_sent_at is None
+        notifications = (
+            db.query(Notification).filter(Notification.category == NotificationCategory.error_spike).all()
+        )
+        assert len(notifications) == 1

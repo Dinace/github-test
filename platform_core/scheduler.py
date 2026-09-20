@@ -1,7 +1,7 @@
 """Infrastructure de tâches planifiées (APScheduler), partagée par les agents Réseaux
 sociaux, Maintenance et Planning — remplace les déclenchements manuels via API documentés
 comme "point ouvert" dans leurs `skills/README.md` respectifs (pas de vraie tâche planifiée
-avant cette session).
+avant l'ajout de ce module).
 
 `BackgroundScheduler` (pas `AsyncIOScheduler`) : la logique métier existante est
 synchrone (SQLAlchemy `Session`, clients HTTP synchrones) — `BackgroundScheduler` l'exécute
@@ -48,6 +48,7 @@ def create_scheduler() -> BackgroundScheduler:
         run_security_scans,
         run_uptime_checks,
     )
+    from agents.planning.scheduled_jobs import send_appointment_reminders
     from agents.reseaux_sociaux.scheduled_jobs import publish_due_posts
 
     scheduler = BackgroundScheduler(timezone="UTC")
@@ -82,5 +83,13 @@ def create_scheduler() -> BackgroundScheduler:
         "interval",
         hours=1,
         id="run_security_scans",
+    )
+    # Fenêtre de rappel de 24h (agents/planning/scheduled_jobs.py::_REMINDER_WINDOW) : un
+    # tick toutes les 30 minutes suffit largement à détecter l'échéance à temps.
+    scheduler.add_job(
+        _safe("send_appointment_reminders", lambda: send_appointment_reminders(SessionLocal)),
+        "interval",
+        minutes=30,
+        id="send_appointment_reminders",
     )
     return scheduler

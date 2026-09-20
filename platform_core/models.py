@@ -84,6 +84,13 @@ class Client(Base):
     # agents/prospection/skills/README.md).
     whatsapp_phone_number_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     whatsapp_access_token: Mapped[str | None] = mapped_column(EncryptedString(1000), nullable=True)
+    # Numéro de contact de la PME côté staff (agent Planning : rappels de RDV) — distinct de
+    # whatsapp_phone_number_id ci-dessus, qui est le compte WhatsApp Business DU CLIENT pour
+    # contacter SES PROPRES prospects (agent Prospection). Ici c'est l'inverse : le STAFF
+    # de la plateforme contacte CE numéro, via le compte WhatsApp Business de la PLATEFORME
+    # (settings.platform_whatsapp_*), pas celui du client. Pas de flux de saisie dédié pour
+    # l'instant : renseigné manuellement en base, comme les autres champs de contact.
+    contact_phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
     subscription: Mapped["Subscription | None"] = relationship(back_populates="client", uselist=False)
@@ -367,6 +374,9 @@ class Appointment(Base):
     )
     notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    # Horodatage du dernier rappel WhatsApp envoyé (agents/planning/scheduled_jobs.py) — évite
+    # de renvoyer un rappel à chaque tick tant que le rendez-vous reste proposed/confirmed.
+    reminder_sent_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     client: Mapped["Client"] = relationship()

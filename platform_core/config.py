@@ -47,5 +47,15 @@ class Settings(BaseSettings):
     # plutôt que de rejeter tous les webhooks tant que le secret n'est pas configuré.
     sentry_webhook_secret: str = ""
 
+    # Planning — rappels de RDV (agents/planning/scheduled_jobs.py). Compte WhatsApp
+    # Business de la PLATEFORME (l'équipe qui opère la plateforme), distinct du compte
+    # WhatsApp de chaque CLIENT (Client.whatsapp_phone_number_id/whatsapp_access_token,
+    # utilisé par l'agent Prospection pour que le client contacte SES PROPRES prospects) :
+    # ici c'est le staff qui contacte le client, jamais l'inverse. Vide par défaut : le job
+    # ne fait rien tant que ces deux variables ne sont pas configurées (dégradation
+    # silencieuse, cohérente avec les autres tâches planifiées sans credentials).
+    platform_whatsapp_phone_number_id: str = ""
+    platform_whatsapp_access_token: str = ""
+
 
 settings = Settings()

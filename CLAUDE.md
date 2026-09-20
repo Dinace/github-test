@@ -97,10 +97,13 @@ table des packs et n'est pas un critère de montée en gamme.
 - **Suivi transverse** : vue d'ensemble de l'activité de chaque client à travers les 4
   agents (sites/posts/prospects en attente d'action), et historique du pipeline de chaque
   prospect dans le temps (`platform_core.models.ActivityEvent`, journal partagé auquel
-  chaque agent peut émettre — pour l'instant seul Prospection le fait).
+  chaque agent peut émettre — Création de site, Réseaux sociaux et Prospection le font ;
+  Maintenance n'émet volontairement rien, ses actions n'étant pas initiées par un client).
 - **Rendez-vous** : entre l'équipe de la plateforme et les clients PME (onboarding, suivi
   commercial, support) — pas un module de prise de RDV grand public pour les clients finaux
-  du PME, qui resterait un besoin distinct non couvert.
+  du PME, qui resterait un besoin distinct non couvert. Rappel automatique par WhatsApp
+  (24h avant l'échéance) via le compte WhatsApp Business de la **plateforme**
+  (`PLATFORM_WHATSAPP_*`, distinct du compte de chaque client) vers `Client.contact_phone`.
 - Deux niveaux d'accès : staff (`OPS_API_TOKEN`, même stopgap que Maintenance) pour voir
   n'importe quel client et gérer les RDV ; client (sa propre clé API) pour son propre résumé
   et ses propres RDV. Voir `agents/planning/skills/README.md` pour le détail.
@@ -139,8 +142,7 @@ sont propres.
   d'opération avant scalabilité maximale). À réévaluer si le volume de jobs ou le besoin de
   les distribuer sur plusieurs machines l'exige. Utilisé par les agents Réseaux sociaux
   (auto-publication), Maintenance (sauvegardes/rétention, scan de sécurité, disponibilité)
-  et, à terme, Planning (rappels de RDV — pas encore branché, voir
-  `agents/planning/skills/README.md`).
+  et Planning (rappels de RDV par WhatsApp, voir `agents/planning/skills/README.md`).
 - **Dashboard client** : rendu côté serveur, stack 100% Python plutôt qu'un frontend JS
   séparé.
   - **Jinja2** pour les templates (déjà utilisé par l'agent Création de site — une seule
@@ -257,7 +259,11 @@ hors packs — voir §2 "Agent Planning").
    token`/`whatsapp_access_token`), renseigner `TOKEN_ENCRYPTION_KEY` (sinon stockage en
    clair, dégradation explicite). Pour vérifier la signature des webhooks Sentry entrants
    (`/api/maintenance/webhooks/sentry`), renseigner `SENTRY_WEBHOOK_SECRET` (sinon
-   vérification ignorée). Voir `config/credentials/README.md` pour le détail des deux.
+   vérification ignorée). Pour les rappels de RDV automatiques de l'agent Planning,
+   renseigner `PLATFORM_WHATSAPP_PHONE_NUMBER_ID`/`PLATFORM_WHATSAPP_ACCESS_TOKEN` (compte
+   WhatsApp Business de la plateforme, pas d'un client) et `Client.contact_phone` (sinon la
+   tâche planifiée ne fait rien). Voir `config/credentials/README.md` pour le détail de ces
+   variables.
 2. Installer les dépendances (Python ≥ 3.12) : `pip install -e ".[dev]"`
 3. Appliquer les migrations : `alembic upgrade head`
 4. Lancer l'app : `uvicorn app.main:app --reload`, puis ouvrir `http://localhost:8000`

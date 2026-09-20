@@ -24,7 +24,8 @@ où chaque agent ne journalise que ses propres actions).
 | **Journal d'événements applicatif explicite** (`platform_core.activity.log_event`, table dédiée) | Reconstituer l'historique du pipeline d'un prospect dans le temps, que le statut courant seul ne conserve pas. | Préféré à un outil de versioning automatique (ex. SQLAlchemy-Continuum, qui journalise tout changement de colonne) : plus simple, plus lisible, et ne journalise que les événements métier pertinents plutôt que chaque mutation SQL. Vit dans `platform_core` (partagé) plutôt que dans un agent, car plusieurs agents y écrivent. |
 | **API Claude directe** (SDK `anthropic`, modèle `claude-sonnet-5`) | Transformer un résumé structuré (compteurs) en 2-3 phrases de synthèse pour l'équipe. | Même raisonnement que les 4 autres agents : transformer des données structurées en texte est un appel unique, pas une tâche agentique ouverte — pas le Claude Agent SDK. |
 | **FastAPI (déjà en place)** | Exposer deux niveaux d'accès distincts : staff (jeton d'opération) et client (clé API). | Aucune nouvelle dépendance ; réutilise le même mécanisme d'auth que Maintenance (staff) et que Création de site/Réseaux sociaux/Prospection (client). |
-| **`agents.prospection.whatsapp` (réutilisé, pas dupliqué)** | Rappel de RDV par WhatsApp (extension future, pas encore branchée). | Le module existe déjà et fonctionne (voir agents/prospection/skills/README.md) ; le réutiliser suit le même précédent que Maintenance réutilisant le client R2 de Création de site — un seul module par intégration technique, pas une copie par agent. |
+| **`agents.prospection.whatsapp` (réutilisé, pas dupliqué)** | Rappel de RDV par WhatsApp (`scheduled_jobs.py::send_appointment_reminders`). | Le module existe déjà et fonctionne (voir agents/prospection/skills/README.md) ; le réutiliser suit le même précédent que Maintenance réutilisant le client R2 de Création de site — un seul module par intégration technique, pas une copie par agent. |
+| **APScheduler** (partagé, voir `platform_core/scheduler.py`) | Déclenche `send_appointment_reminders` automatiquement (tick de 30 minutes). | Même infrastructure que Réseaux sociaux/Maintenance, pas une planification propre à Planning. |
 
 **Écarté pour l'instant** : un vrai outil de calendrier (Google Calendar API, Calendly...)
 pour la synchronisation du côté staff — le besoin actuel (RDV internes, volume faible) ne le
@@ -59,6 +60,23 @@ justifie pas ; à réévaluer si le volume de RDV staff augmente significativeme
   SQLAlchemy découvert et corrigé ci-dessous), historique de pipeline, cycle de vie complet
   d'un RDV, synthèse (Claude simulé), et les deux routeurs via l'API — aucun appel réseau
   réel dans la suite de tests.
+- `scheduled_jobs.py::send_appointment_reminders` : tâche planifiée (APScheduler, voir
+  `platform_core/scheduler.py`, tick de 30 minutes) qui envoie un rappel WhatsApp pour tout
+  rendez-vous `proposed`/`confirmed` dont l'échéance tombe dans les 24h et n'a pas déjà reçu
+  de rappel (`Appointment.reminder_sent_at`). Décision actée dans cette session (jusqu'ici
+  explicitement en attente) : c'est le **staff** qui contacte le client, jamais l'inverse —
+  ce qui nécessitait deux informations qui n'existaient pas encore :
+  - `Client.contact_phone` : le numéro de contact de la PME (renseigné manuellement, comme
+    les autres champs de contact du client) — distinct de `Client.whatsapp_phone_number_id`
+    (le compte WhatsApp Business DU CLIENT, utilisé par Prospection pour que ce client
+    contacte SES PROPRES prospects) ;
+  - `settings.platform_whatsapp_phone_number_id`/`platform_whatsapp_access_token` : le
+    compte WhatsApp Business de la **plateforme elle-même**, puisque c'est l'équipe qui
+    parle en son nom propre, pas au nom d'un client.
+  Aucune des deux configurée → le job ne fait rien (dégradation silencieuse, cohérente avec
+  les autres tâches planifiées sans credentials). Échec d'envoi → notification staff (une
+  seule par rendez-vous tant qu'elle n'est pas acquittée), même principe que
+  `agents/reseaux_sociaux/scheduled_jobs.py::publish_due_posts`.
 
 ## Bug découvert et corrigé pendant l'implémentation
 
@@ -77,9 +95,12 @@ colonne `JSON` comme un littéral JSON `"null"`, **pas** un vrai `NULL` SQL — 
   un client), mais les deux mécanismes (lecture directe vs journal d'événements) devront
   converger si `dashboard.py` a un jour besoin de l'historique, pas seulement du compte
   courant.
-- Rappels de RDV automatiques (WhatsApp) — le module existe (`agents.prospection.whatsapp`)
-  mais n'est pas branché sur les RDV.
 - Synchronisation avec un vrai calendrier externe (Google Calendar) côté staff.
+- Pas de fenêtre de rappel configurable (fixée à 24h avant l'échéance, voir
+  `scheduled_jobs.py::_REMINDER_WINDOW`) — un rappel à plusieurs échéances (ex. J-1 et H-1)
+  n'a pas été demandé, à construire si le besoin se confirme.
+- `Client.contact_phone` renseigné manuellement, pas de flux de saisie dédié (même limite
+  que `meta_page_id`/`whatsapp_phone_number_id` pour les autres agents).
 - Pas de compte staff individuel (même limite que `OPS_API_TOKEN` pour Maintenance) :
   `staff_contact` est un champ texte libre, pas une identité vérifiée.
 
